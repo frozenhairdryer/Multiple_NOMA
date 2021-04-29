@@ -36,9 +36,12 @@ def SER(predictions, labels):
     return (np.sum(np.argmax(predictions, 1) != labels) / predictions.shape[0])
 
 # number of symbols
-M = 4
+Csize = np.array([4])
+M = np.product(Csize)
 
-EbN0 = 11
+C1=np.load("constellation1.npy")
+
+EbN0 = 12
 
 # noise standard deviation
 sigma_n = np.sqrt((1/2/np.log2(M)) * 10**(-EbN0/10))
@@ -63,6 +66,7 @@ hidden_neurons_RX = [hidden_neurons_RX_1, hidden_neurons_RX_2, hidden_neurons_RX
 # Generate Validation Data
 y_valid = np.random.randint(M,size=N_valid)
 y_valid_onehot = np.eye(M)[y_valid]
+
 
 # meshgrid for plotting
 ext_max = 1.8  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
@@ -92,9 +96,11 @@ class Autoencoder(nn.Module):
     def forward(self, x):
         # compute output
         encoded = self.network_transmitter(x)
-        # compute normalization factor and normalize channel output
-        norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 )                            
-        modulated = encoded / norm_factor    
+        # compute normalization factor and normalize channel output              
+        mod1=np.random.randint(4)
+        modulated = torch.view_as_real(torch.view_as_complex(encoded)*(C1[mod1,0]+1j*C1[mod1,1]))
+        norm_factor = torch.sqrt(torch.mean(torch.mul(modulated,modulated)) * 2 ) 
+        modulated = modulated / norm_factor 
         received = self.channel_model(modulated)
         logits = self.network_receiver(received)
         return logits
@@ -220,6 +226,11 @@ plt.title('SER on Validation Dataset',fontsize=16)
 print('Minimum SER obtained: %1.5f (epoch %d out of %d)' % (validation_SERs[min_SER_iter], min_SER_iter, len(validation_SERs)))
 print('The corresponding constellation symbols are:\n', constellations[min_SER_iter])
 
+#Sent constellation points:
+# mod1=np.random.randint(0,4,M)
+# sent=np.transpose(constellations[min_SER_iter])*np.array([C1[mod1,0],C1[mod1,1]])
+
+#np.save("constellation1",constellations[min_SER_iter])
 
 plt.figure(figsize=(19,6))
 font = {'size'   : 14}
@@ -236,9 +247,16 @@ plt.ylim((-ext_max_plot,ext_max_plot))
 plt.grid(which='both')
 plt.title('Constellation',fontsize=16)
 
+# sa=[]
+# for item in range(int(np.size(validation_received[min_SER_iter])/2)):
+#     mod1=np.random.randint(0,4)
+#     sa.append(validation_received[min_SER_iter][item,0]*C1[mod1,0]+1j*validation_received[min_SER_iter][item,1]*C1[mod1,1])
+
 plt.subplot(132)
 #plt.contourf(mgx,mgy,decision_region_evolution[-1].reshape(mgy.shape).T,cmap='coolwarm',vmin=0.3,vmax=0.7)
 plt.scatter(validation_received[min_SER_iter][:,0], validation_received[min_SER_iter][:,1], c=y_valid, cmap='tab20',s=4)
+#plt.scatter(sent[:,0],sent[:,1])
+#plt.scatter(np.real(sa),np.imag(sa),cmap='tab20')
 plt.axis('scaled')
 plt.xlabel(r'$\Re\{r\}$',fontsize=14)
 plt.ylabel(r'$\Im\{r\}$',fontsize=14)
