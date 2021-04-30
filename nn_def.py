@@ -29,11 +29,9 @@ print("We are using the following device for learning:",device)
 # channel model is defined inside the nn
 #N_0 = 0.2    # noise power for complex AWGN
 
-###############################################################
-
-# helper function to compute the symbol error rate
-def SER(predictions, labels):
-    return (np.sum(np.argmax(predictions, 1) != labels) / predictions.shape[0])
+# Training parameters
+num_epochs = 50
+batches_per_epoch = 300
 
 # number of symbols
 Csize = np.array([4])
@@ -43,11 +41,21 @@ C1=np.load("constellation1.npy")
 
 EbN0 = 12
 
+# validation set. Training examples are generated on the fly
+N_valid = 10000
+
+###############################################################
+
+# helper function to compute the symbol error rate
+def SER(predictions, labels):
+    s2=np.mod(np.argmax(predictions, 1),4)
+    return (np.sum(s2 != labels) / predictions.shape[0])
+
+
+
 # noise standard deviation
 sigma_n = np.sqrt((1/2/np.log2(M)) * 10**(-EbN0/10))
 
-# validation set. Training examples are generated on the fly
-N_valid = 100000
 
 # number of neurons in hidden layers at transmitter
 hidden_neurons_TX_1 = 50
@@ -88,7 +96,7 @@ class Autoencoder(nn.Module):
         self.fcR2 = nn.Linear(hidden_neurons_RX[0], hidden_neurons_RX[1]) 
         self.fcR3 = nn.Linear(hidden_neurons_RX[1], hidden_neurons_RX[2]) 
         self.fcR4 = nn.Linear(hidden_neurons_RX[2], hidden_neurons_RX[3]) 
-        self.fcR5 = nn.Linear(hidden_neurons_RX[3], M) 
+        self.fcR5 = nn.Linear(hidden_neurons_RX[3], M*4) 
 
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -97,13 +105,15 @@ class Autoencoder(nn.Module):
         # compute output
         encoded = self.network_transmitter(x)
         # compute normalization factor and normalize channel output              
-        mod1=np.random.randint(4)
-        modulated = torch.view_as_real(torch.view_as_complex(encoded)*(C1[mod1,0]+1j*C1[mod1,1]))
-        norm_factor = torch.sqrt(torch.mean(torch.mul(modulated,modulated)) * 2 ) 
-        modulated = modulated / norm_factor 
+        norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 ) 
+        modulated = encoded / norm_factor
+        mod1 = np.random.randint(0,4, int(len(modulated)))
+        mod = torch.tensor(C1[mod1,0]+1j*C1[mod1,1])
+        #mod1=torch.randint(0, 4, len(modulated))
+        modulated = torch.view_as_real(torch.multiply(torch.view_as_complex(modulated),mod))
         received = self.channel_model(modulated)
         logits = self.network_receiver(received)
-        return logits
+        return logits,mod1
         
     def network_transmitter(self,batch_labels):
         out = self.activation_function(self.fcT1(batch_labels))
@@ -124,6 +134,7 @@ class Autoencoder(nn.Module):
     def channel_model(self,modulated):
         # just add noise, nothing else
         received = torch.add(modulated, sigma_n*torch.randn(len(modulated),2).to(device))
+        #received = torch.view_as_real(torch.view_as_complex(received)/(C1[mod1,0]+1j*C1[mod1,1]))
         return received
 
 model = Autoencoder(hidden_neurons_TX, hidden_neurons_RX)
@@ -138,9 +149,7 @@ loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters())  
 
 
-# Training parameters
-num_epochs = 30
-batches_per_epoch = 300
+
 
 # Vary batch size during training
 batch_size_per_epoch = np.linspace(100,10000,num=num_epochs)
@@ -163,10 +172,16 @@ for epoch in range(num_epochs):
         batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels.long()]=1
 
         # Propagate (training) data through the net
-        logits = model(batch_labels_onehot)
+        logits, mod1_t = model(batch_labels_onehot)
+        #print(mod1_t)
+        #print(batch_labels)
+        # Add first modulator
+        new_labels=batch_labels+4*torch.tensor(mod1_t)
+        new_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), M*4, device=device)
+        new_labels_onehot[range(new_labels_onehot.shape[0]), new_labels.long()]=1
 
         # compute loss
-        loss = loss_fn(logits.squeeze(), batch_labels.long())
+        loss = loss_fn(logits.squeeze(), new_labels.long())
 
         # compute gradients
         loss.backward()
@@ -178,7 +193,8 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
         
     # compute validation SER
-    out_valid = softmax(model(torch.Tensor(y_valid_onehot).to(device)))
+    v,_= model(torch.Tensor(y_valid_onehot).to(device))
+    out_valid = softmax(v)
     validation_SERs[epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid)
     print('Validation SER after epoch %d: %f (loss %1.8f)' % (epoch, validation_SERs[epoch], loss.detach().cpu().numpy()))                
     
@@ -236,9 +252,15 @@ plt.figure(figsize=(19,6))
 font = {'size'   : 14}
 plt.rc('font', **font)
 plt.rc('text', usetex=True)
-    
+
+# resulting constellation
+constellation_cmplx=np.matrix(constellations[min_SER_iter][:,0]+1j*constellations[min_SER_iter][:,1])
+C1_cmplx = np.matrix(C1[:,0]+1j*C1[:,1])
+C_all_cmplx = np.array(np.matmul(np.transpose(constellation_cmplx),C1_cmplx)).flatten()
+
 plt.subplot(131)
-plt.scatter(constellations[min_SER_iter][:,0], constellations[min_SER_iter][:,1], c=range(M), cmap='tab20',s=50)
+#plt.scatter(constellations[min_SER_iter][:,0]*, constellations[min_SER_iter][:,1], c=range(M), cmap='tab20',s=50)
+plt.scatter(np.real(C_all_cmplx),np.imag(C_all_cmplx),c=range(M*4), cmap='tab20',s=50)
 plt.axis('scaled')
 plt.xlabel(r'$\Re\{r\}$',fontsize=14)
 plt.ylabel(r'$\Im\{r\}$',fontsize=14)
@@ -247,16 +269,15 @@ plt.ylim((-ext_max_plot,ext_max_plot))
 plt.grid(which='both')
 plt.title('Constellation',fontsize=16)
 
-# sa=[]
-# for item in range(int(np.size(validation_received[min_SER_iter])/2)):
-#     mod1=np.random.randint(0,4)
-#     sa.append(validation_received[min_SER_iter][item,0]*C1[mod1,0]+1j*validation_received[min_SER_iter][item,1]*C1[mod1,1])
+val_cmplx=validation_received[min_SER_iter][:,0]+1j*validation_received[min_SER_iter][:,1]
+#val_all_cmplx=np.array(np.matmul(np.transpose(val_cmplx),C1_cmplx)).flatten()
+#random_indexes = np.random.randint(0,4,len(val_cmplx))
+val_all_cmplx = np.random.choice(np.array(C1_cmplx).flatten(),np.size(val_cmplx))*val_cmplx
 
 plt.subplot(132)
 #plt.contourf(mgx,mgy,decision_region_evolution[-1].reshape(mgy.shape).T,cmap='coolwarm',vmin=0.3,vmax=0.7)
-plt.scatter(validation_received[min_SER_iter][:,0], validation_received[min_SER_iter][:,1], c=y_valid, cmap='tab20',s=4)
-#plt.scatter(sent[:,0],sent[:,1])
-#plt.scatter(np.real(sa),np.imag(sa),cmap='tab20')
+#plt.scatter(validation_received[min_SER_iter][:,0], validation_received[min_SER_iter][:,1], c=y_valid, cmap='tab20',s=4)
+plt.scatter(np.real(val_all_cmplx), np.imag(val_all_cmplx), c=y_valid, cmap='tab20',s=4)
 plt.axis('scaled')
 plt.xlabel(r'$\Re\{r\}$',fontsize=14)
 plt.ylabel(r'$\Im\{r\}$',fontsize=14)
@@ -267,7 +288,8 @@ plt.title('Received',fontsize=16)
 plt.subplot(133)
 decision_scatter = np.argmax(decision_region_evolution[min_SER_iter], 1)
 plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter, cmap=matplotlib.colors.ListedColormap(colors=new_color_list),s=4)
-plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
+#plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
+plt.scatter(np.real(val_all_cmplx[0:4000]), np.imag(val_all_cmplx[0:4000]), c=y_valid[0:4000], cmap='tab20',s=4)
 plt.axis('scaled')
 plt.xlim((-ext_max_plot,ext_max_plot))
 plt.ylim((-ext_max_plot,ext_max_plot))
