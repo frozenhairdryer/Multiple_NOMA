@@ -24,20 +24,16 @@ print("We are using the following device for learning:",device)
 #test_size = 10                 # number of symbols in the test data
 #batch_size = 5
 
-# channel model is defined inside the nn
-#N_0 = 0.2    # noise power for complex AWGN
-
 # Training parameters
 num_epochs = 30
 batches_per_epoch = 300
 
 # number of symbols
-M = np.array([4,4])
+M = np.array([2,8,2])
 M_all = np.product(M)
 
-#C1=np.load("constellation1.npy")
-
-EbN0 = np.array([60,12])
+# Definition of noise
+EbN0 = np.array([60,60,18])
 
 # validation set. Training examples are generated on the fly
 N_valid = 10000
@@ -136,17 +132,18 @@ class Decoder(nn.Module):
         return logits
     
 
-#enc=[]
-#for const in range(np.size(M)):
-enc_1 = Encoder(M[0],hidden_neurons_TX)
-enc_2 = Encoder(M[1],hidden_neurons_TX)
+enc=[]
+optimizer=[]
+for const in range(np.size(M)):
+    enc.append(Encoder(M[const],hidden_neurons_TX))
+    enc[const].to(device)
+    # Adam Optimizer
+    optimizer.append(optim.Adam(enc[const].parameters()))
+
+
+
 
 dec_1 = Decoder(M_all,hidden_neurons_RX)
-#ec_2 = Decoder(hidden_neurons_RX)
-
-
-enc_1.to(device)
-enc_2.to(device)
 dec_1.to(device)
 #dec_2.to(device)
 
@@ -156,9 +153,11 @@ softmax = nn.Softmax(dim=1)
 loss_fn = nn.CrossEntropyLoss()
 
 # Adam Optimizer
-optimizer = [optim.Adam(enc_1.parameters()), optim.Adam(enc_2.parameters()), optim.Adam(dec_1.parameters()) ]
+#optimizer = [optim.Adam(enc_1.parameters()), optim.Adam(enc_2.parameters()), optim.Adam(dec_1.parameters()) ]
+optimizer.append(optim.Adam(dec_1.parameters()))
 
-
+#enc_1 = enc[0]
+#enc_2 = enc[1]
 
 # Vary batch size during training
 batch_size_per_epoch = np.linspace(100,10000,num=num_epochs)
@@ -167,8 +166,10 @@ validation_SERs = np.zeros(num_epochs)
 validation_received = []
 decision_region_evolution = []
 constellations = []
-constellation_1 =[]
-constellation_2 =[]
+# constellations only used for plotting
+constellation_base = []
+for modulator in range(np.size(M)):
+    constellation_base.append([])
 
 print('Start Training')
 for epoch in range(num_epochs):
@@ -179,28 +180,29 @@ for epoch in range(num_epochs):
     for step in range(batches_per_epoch):
         # Generate training data: In most cases, you have a dataset and do not generate a training dataset during training loop
         # sample new mini-batch directory on the GPU (if available)
+        M_enc=1
         for num in range(np.size(M)):        
             batch_labels[:,num].random_(M[num])
-
             batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), M[num], device=device)
             batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,num].long()]=1
-
+            
             if num==0:
                 # Propagate (training) data through the first transmitter
-                modulated = enc_1(batch_labels_onehot)
+                modulated = enc[0](batch_labels_onehot)
                 # Propagate through channel 1
                 received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             else:
-                modulated = torch.view_as_real(torch.view_as_complex(received)*torch.view_as_complex(enc_2(batch_labels_onehot)))
-                batch_labels[:,num] = batch_labels[:,num-1]+M[num-1]*batch_labels[:,num]
+                
+                modulated = torch.view_as_real(torch.view_as_complex(received)*torch.view_as_complex(enc[num](batch_labels_onehot)))
+                batch_labels[:,num] = batch_labels[:,num-1]+M_enc*batch_labels[:,num]
                 received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             
-
             if num==np.size(M)-1:
                 decoded = dec_1(received)
+            M_enc = M_enc*M[num]
 
 
-        # Add first modulator
+        # Resulting information labels
         new_labels=batch_labels[:,np.size(M)-1]
         new_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), M_all, device=device)
         new_labels_onehot[range(new_labels_onehot.shape[0]), new_labels.long()]=1
@@ -223,33 +225,74 @@ for epoch in range(num_epochs):
 
 
     # compute validation SER
-    y1 = np.mod(y_valid,M[0])
-    y1_onehot = np.eye(M[0])[y1]
+    M_enc=1
+    for num in range(np.size(M)):
+        if num==0:
+            y = np.mod(y_valid,M[0])
+            y_onehot = np.eye(M[0])[y]
+            encoded = enc[0](torch.Tensor(y_onehot).to(device))
+            #y_val = (y_valid/M[0]).astype(int)
+            y_val = y_valid-y
+            ycontrol = y
+            channel = torch.add(encoded, sigma_n[0]*torch.randn(len(encoded),2).to(device))
+        elif num<np.size(M)-1:
+            y = np.array(np.mod(y_val, M_enc*M[num])/M_enc, int)
+            y_onehot = np.eye(M[num])[y]
+            encoded = torch.view_as_real(torch.view_as_complex(channel)*torch.view_as_complex(enc[num](torch.Tensor(y_onehot).to(device))))
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
+            y_val = (y_val-y*M_enc)
+            ycontrol= ycontrol + y*M_enc
+        else:
+            y = np.array(y_val/M_enc, int)
+            y_onehot = np.eye(M[num])[y]
+            encoded = torch.view_as_real(torch.view_as_complex(channel)*torch.view_as_complex(enc[num](torch.Tensor(y_onehot).to(device))))
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
+            ycontrol = ycontrol + y*M_enc
+        M_enc=M_enc*M[num]
 
-    y2 = (y_valid/M[0]).astype(int)
-    y2_onehot = np.eye(M[1])[y2]
+    if ycontrol.all()!=y_valid.all():
+        print("CONVERSION ERROR")
+    #y1 = np.mod(y_valid,M[0])
+    #y1_onehot = np.eye(M[0])[y1]
 
-    encoded_1 = enc_1(torch.Tensor(y1_onehot).to(device))
-    ch1 = torch.add(encoded_1, sigma_n[0]*torch.randn(len(encoded_1),2).to(device))
-    encoded_2 = torch.view_as_real(torch.view_as_complex(ch1)*torch.view_as_complex(enc_2(torch.Tensor(y2_onehot).to(device))))
-    ch2 = torch.add(encoded_2, sigma_n[1]*torch.randn(len(encoded_2),2).to(device))
-    decoded = dec_1(ch2)
+    #y2 = (y_valid/M[0]).astype(int)
+    #y2_onehot = np.eye(M[1])[y2]
+
+    #encoded_1 = enc[0](torch.Tensor(y1_onehot).to(device))
+    #ch1 = torch.add(encoded_1, sigma_n[0]*torch.randn(len(encoded_1),2).to(device))
+    #encoded_2 = torch.view_as_real(torch.view_as_complex(ch1)*torch.view_as_complex(enc[1](torch.Tensor(y2_onehot).to(device))))
+    #ch2 = torch.add(encoded_2, sigma_n[1]*torch.randn(len(encoded_2),2).to(device))
+    decoded = dec_1(channel)
 
     out_valid = softmax(decoded)
     validation_SERs[epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid)
     print('Validation SER after epoch %d: %f (loss %1.8f)' % (epoch, validation_SERs[epoch], loss.detach().cpu().numpy()))                
     
-    validation_received.append(ch2.detach().cpu().numpy())
+    validation_received.append(channel.detach().cpu().numpy())
     
-    # calculate and store constellation
-    constellation_1.append(torch.view_as_complex(enc_2.network_transmitter(torch.eye(M[1]))))
-    constellation_2.append(torch.view_as_complex(enc_1.network_transmitter(torch.eye(M[0]))))
-    encoded=torch.zeros((M[0],M[1]))+0j
-    
-    for encoder_item in range(M[0]):
-        for encoder_item2 in range(M[1]):
-            encoded[encoder_item, encoder_item2]=constellation_1[epoch][encoder_item]*constellation_2[epoch][encoder_item2]
+    # calculate and store base constellations
+    for num in range(np.size(M)):
+        constellation_base[num].append(torch.view_as_complex(enc[num].network_transmitter(torch.eye(M[num]))))
+        #constellation_base[1].append(torch.view_as_complex(enc[0].network_transmitter(torch.eye(M[0]))))
+        if num==0:
+            encoded = constellation_base[num][epoch].repeat(M[num+1])
+            encoded = torch.reshape(encoded,(M[num+1],int(encoded.size()/M[num+1])))
+            #print(encoded)
+        elif num<np.size(M)-1:
+            helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
+            encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten().repeat(M[num+1])/M[num]
+            encoded = torch.reshape(encoded,(M[num+1],int(encoded.size()/M[num+1])))
+        else:
+            helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
+            encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten()/M[num]
 
+
+    #encoded=torch.zeros(list(M))+0j
+    #for encoder_item in range(M[0]):
+    #    for encoder_item2 in range(M[1]):
+    #        encoded[encoder_item, encoder_item2]=constellation_base[0][epoch][encoder_item]*constellation_base[1][epoch][encoder_item2]
+
+    #encoded=np.array(const).flatten()
     constellations.append(encoded.detach().cpu().numpy())
         
     # store decision region for generating the animation
@@ -327,21 +370,23 @@ plt.ylabel(r'$\Im\{r\}$',fontsize=14)
 plt.title('Decision regions',fontsize=16)
 
 plt.figure("base constellations")
-plt.subplot(121)
-plt.scatter(np.real(constellation_1[min_SER_iter].detach().numpy()),np.imag(constellation_1[min_SER_iter].detach().numpy()), c=np.arange(M[0]))
-plt.xlim((-ext_max_plot,ext_max_plot))
-plt.ylim((-ext_max_plot,ext_max_plot))
-plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-plt.ylabel(r'$\Im\{r\}$',fontsize=14)
-plt.tight_layout()
+for num in range(np.size(M)):
+    plt.subplot(1,np.size(M),num+1)
+    plt.scatter(np.real(constellation_base[num][min_SER_iter].detach().numpy()),np.imag(constellation_base[num][min_SER_iter].detach().numpy()), c=np.arange(M[num]))
+    plt.xlim((-ext_max_plot,ext_max_plot))
+    plt.ylim((-ext_max_plot,ext_max_plot))
+    plt.xlabel(r'$\Re\{r\}$',fontsize=14)
+    plt.ylabel(r'$\Im\{r\}$',fontsize=14)
+    plt.grid()
+    plt.tight_layout()
 
-plt.subplot(122)
-plt.scatter(np.real(constellation_2[min_SER_iter].detach().numpy()),np.imag(constellation_2[min_SER_iter].detach().numpy()),c=np.arange(M[1]))
-plt.xlim((-ext_max_plot,ext_max_plot))
-plt.ylim((-ext_max_plot,ext_max_plot))
-plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-plt.ylabel(r'$\Im\{r\}$',fontsize=14)
-plt.tight_layout()
+#plt.subplot(122)
+#plt.scatter(np.real(constellation_base[1][min_SER_iter].detach().numpy()),np.imag(constellation_base[1][min_SER_iter].detach().numpy()),c=np.arange(M[1]))
+#plt.xlim((-ext_max_plot,ext_max_plot))
+#plt.ylim((-ext_max_plot,ext_max_plot))
+#plt.xlabel(r'$\Re\{r\}$',fontsize=14)
+#plt.ylabel(r'$\Im\{r\}$',fontsize=14)
+#plt.tight_layout()
 
 
 
