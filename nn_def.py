@@ -34,12 +34,12 @@ num_epochs = 50
 batches_per_epoch = 300
 
 # number of symbols
-Csize = np.array([4])
+Csize = np.array([8])
 M = np.product(Csize)
 
 C1=np.load("constellation1.npy")
 
-EbN0 = 12
+EbN0 = 16
 
 # validation set. Training examples are generated on the fly
 N_valid = 10000

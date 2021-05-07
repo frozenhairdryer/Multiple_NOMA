@@ -25,15 +25,15 @@ print("We are using the following device for learning:",device)
 #batch_size = 5
 
 # Training parameters
-num_epochs = 30
+num_epochs = 60
 batches_per_epoch = 300
 
 # number of symbols
-M = np.array([2,8,2])
+M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([60,60,18])
+EbN0 = np.array([15,15])
 
 # validation set. Training examples are generated on the fly
 N_valid = 10000
@@ -52,22 +52,23 @@ sigma_n = np.sqrt((1/2/np.log2(M)) * 10**(-EbN0/10))
 
 
 # number of neurons in hidden layers at transmitter
-hidden_neurons_TX_1 = 50
-hidden_neurons_TX_2 = 50
-hidden_neurons_TX_3 = 50
-hidden_neurons_TX_4 = 50
-hidden_neurons_TX = [hidden_neurons_TX_1, hidden_neurons_TX_2, hidden_neurons_TX_3, hidden_neurons_TX_4]
+#hidden_neurons_TX = 2*M_all
+#hidden_neurons_TX_2 = 50
+#hidden_neurons_TX_3 = 50
+#hidden_neurons_TX_4 = 50
+#hidden_neurons_TX = [hidden_neurons_TX_1, hidden_neurons_TX_2, hidden_neurons_TX_3, hidden_neurons_TX_4]
 
 # number of neurons in hidden layers at receiver
-hidden_neurons_RX_1 = 50
-hidden_neurons_RX_2 = 50
-hidden_neurons_RX_3 = 50
-hidden_neurons_RX_4 = 50
-hidden_neurons_RX = [hidden_neurons_RX_1, hidden_neurons_RX_2, hidden_neurons_RX_3, hidden_neurons_RX_4]
+#hidden_neurons_RX = 2*M_all
+#hidden_neurons_RX_2 = 50
+#hidden_neurons_RX_3 = 50
+#hidden_neurons_RX_4 = 50
+#hidden_neurons_RX = [hidden_neurons_RX_1, hidden_neurons_RX_2, hidden_neurons_RX_3, hidden_neurons_RX_4]
 
 # Generate Validation Data
-y_valid = np.random.randint(M_all,size=N_valid)
-y_valid_onehot = np.eye(M_all)[y_valid]
+y_valid = rng.integers(0,M,size=(N_valid,np.size(M)))
+#print(y_valid)
+#y_valid_onehot = np.eye(M_all)[y_valid]
 
 
 # meshgrid for plotting
@@ -76,14 +77,14 @@ mgx,mgy = np.meshgrid(np.linspace(-ext_max,ext_max,400), np.linspace(-ext_max,ex
 meshgrid = np.column_stack((np.reshape(mgx,(-1,1)),np.reshape(mgy,(-1,1)))) 
 
 class Encoder(nn.Module):
-    def __init__(self,M, hidden_neurons_TX):
+    def __init__(self,M):
         super(Encoder, self).__init__()
         # Define Transmitter Layer: Linear function, M input neurons (symbols), 2 output neurons (real and imaginary part)        
-        self.fcT1 = nn.Linear(M,hidden_neurons_TX[0]) 
-        self.fcT2 = nn.Linear(hidden_neurons_TX[0], hidden_neurons_TX[1]) 
-        self.fcT3 = nn.Linear(hidden_neurons_TX[1], hidden_neurons_TX[2]) 
-        self.fcT4 = nn.Linear(hidden_neurons_TX[2], hidden_neurons_TX[3]) 
-        self.fcT5 = nn.Linear(hidden_neurons_TX[3], 2) 
+        self.fcT1 = nn.Linear(M,2*M) 
+        self.fcT2 = nn.Linear(2*M, 2*M) 
+        #self.fcT3 = nn.Linear(hidden_neurons_TX[1], hidden_neurons_TX[2]) 
+        #self.fcT4 = nn.Linear(hidden_neurons_TX[2], hidden_neurons_TX[3]) 
+        self.fcT5 = nn.Linear(2*M, 2) 
 
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -91,29 +92,32 @@ class Encoder(nn.Module):
     def forward(self, x):
         # compute output
         encoded = self.network_transmitter(x)
-        # compute normalization factor and normalize channel output             
-        norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 ) 
+        # compute normalization factor and normalize channel output
+        norm_factor = torch.mean(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize mean amplitude to 1
+        #norm_factor = torch.max(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize max amplitude to 1 -> somehow results in psk?         
+        #norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 ) # normalize mean amplitude in real and imag to sqrt(1/2)
         modulated = encoded / norm_factor
         return modulated
         
+
     def network_transmitter(self,batch_labels):
         out = self.activation_function(self.fcT1(batch_labels))
         out = self.activation_function(self.fcT2(out))
-        out = self.activation_function(self.fcT3(out))
-        out = self.activation_function(self.fcT4(out))
+        #out = self.activation_function(self.fcT3(out))
+        #out = self.activation_function(self.fcT4(out))
         out = self.activation_function(self.fcT5(out))
         return out
     
 
 class Decoder(nn.Module):
-    def __init__(self,M_all, hidden_neurons_RX):
+    def __init__(self,M_all):
         super(Decoder, self).__init__()
         # Define Receiver Layer: Linear function, 2 input neurons (real and imaginary part), M output neurons (symbols)
-        self.fcR1 = nn.Linear(2,hidden_neurons_RX[0]) 
-        self.fcR2 = nn.Linear(hidden_neurons_RX[0], hidden_neurons_RX[1]) 
-        self.fcR3 = nn.Linear(hidden_neurons_RX[1], hidden_neurons_RX[2]) 
-        self.fcR4 = nn.Linear(hidden_neurons_RX[2], hidden_neurons_RX[3]) 
-        self.fcR5 = nn.Linear(hidden_neurons_RX[3], M_all) 
+        self.fcR1 = nn.Linear(2,2*M_all) 
+        self.fcR2 = nn.Linear(2*M_all,2*M_all) 
+        #self.fcR3 = nn.Linear(hidden_neurons_RX[1], hidden_neurons_RX[2]) 
+        #self.fcR4 = nn.Linear(hidden_neurons_RX[2], hidden_neurons_RX[3]) 
+        self.fcR5 = nn.Linear(2*M_all, M_all) 
 
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -126,8 +130,8 @@ class Decoder(nn.Module):
     def network_receiver(self,inp):
         out = self.activation_function(self.fcR1(inp))
         out = self.activation_function(self.fcR2(out))
-        out = self.activation_function(self.fcR3(out))
-        out = self.activation_function(self.fcR4(out))
+        #out = self.activation_function(self.fcR3(out))
+        #out = self.activation_function(self.fcR4(out))
         logits = self.activation_function(self.fcR5(out))
         return logits
     
@@ -135,7 +139,7 @@ class Decoder(nn.Module):
 enc=[]
 optimizer=[]
 for const in range(np.size(M)):
-    enc.append(Encoder(M[const],hidden_neurons_TX))
+    enc.append(Encoder(M[const]))
     enc[const].to(device)
     # Adam Optimizer
     optimizer.append(optim.Adam(enc[const].parameters()))
@@ -143,7 +147,7 @@ for const in range(np.size(M)):
 
 
 
-dec_1 = Decoder(M_all,hidden_neurons_RX)
+dec_1 = Decoder(M_all)
 dec_1.to(device)
 #dec_2.to(device)
 
@@ -192,8 +196,7 @@ for epoch in range(num_epochs):
                 # Propagate through channel 1
                 received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             else:
-                
-                modulated = torch.view_as_real(torch.view_as_complex(received)*torch.view_as_complex(enc[num](batch_labels_onehot)))
+                modulated = torch.view_as_real(torch.view_as_complex(received)*(torch.view_as_complex(enc[num](batch_labels_onehot))))
                 batch_labels[:,num] = batch_labels[:,num-1]+M_enc*batch_labels[:,num]
                 received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             
@@ -225,7 +228,16 @@ for epoch in range(num_epochs):
 
 
     # compute validation SER
-    M_enc=1
+    for num in range(np.size(M)):
+        y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
+        if num==0:
+            encoded = enc[num](torch.Tensor(y_valid_onehot).to(device))
+            channel = torch.add(encoded, sigma_n[0]*torch.randn(len(encoded),2).to(device))
+        else:
+            encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](torch.Tensor(y_valid_onehot).to(device)))))
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
+
+    """ M_enc=1
     for num in range(np.size(M)):
         if num==0:
             y = np.mod(y_valid,M[0])
@@ -248,10 +260,9 @@ for epoch in range(num_epochs):
             encoded = torch.view_as_real(torch.view_as_complex(channel)*torch.view_as_complex(enc[num](torch.Tensor(y_onehot).to(device))))
             channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
             ycontrol = ycontrol + y*M_enc
-        M_enc=M_enc*M[num]
+        M_enc=M_enc*M[num] """
 
-    if ycontrol.all()!=y_valid.all():
-        print("CONVERSION ERROR")
+    
     #y1 = np.mod(y_valid,M[0])
     #y1_onehot = np.eye(M[0])[y1]
 
@@ -263,28 +274,36 @@ for epoch in range(num_epochs):
     #encoded_2 = torch.view_as_real(torch.view_as_complex(ch1)*torch.view_as_complex(enc[1](torch.Tensor(y2_onehot).to(device))))
     #ch2 = torch.add(encoded_2, sigma_n[1]*torch.randn(len(encoded_2),2).to(device))
     decoded = dec_1(channel)
+    # compare valid
+    comp_valid = np.zeros(N_valid)
+    for num in range(np.size(M)):
+        if num == 0:
+            comp_valid = comp_valid+y_valid[:,0]
+        else:
+            comp_valid = comp_valid+y_valid[:,num]*M[num-1] 
+
 
     out_valid = softmax(decoded)
-    validation_SERs[epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid)
+    validation_SERs[epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), comp_valid)
     print('Validation SER after epoch %d: %f (loss %1.8f)' % (epoch, validation_SERs[epoch], loss.detach().cpu().numpy()))                
     
     validation_received.append(channel.detach().cpu().numpy())
     
     # calculate and store base constellations
     for num in range(np.size(M)):
-        constellation_base[num].append(torch.view_as_complex(enc[num].network_transmitter(torch.eye(M[num]))))
+        constellation_base[num].append(torch.view_as_complex(enc[num](torch.eye(M[num]))))
         #constellation_base[1].append(torch.view_as_complex(enc[0].network_transmitter(torch.eye(M[0]))))
         if num==0:
-            encoded = constellation_base[num][epoch].repeat(M[num+1])
+            encoded = constellation_base[num][epoch].repeat(M[num+1])/M[num+1]
             encoded = torch.reshape(encoded,(M[num+1],int(encoded.size()/M[num+1])))
             #print(encoded)
         elif num<np.size(M)-1:
             helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
-            encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten().repeat(M[num+1])/M[num]
+            encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten().repeat(M[num+1])/M[num+1]
             encoded = torch.reshape(encoded,(M[num+1],int(encoded.size()/M[num+1])))
         else:
             helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
-            encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten()/M[num]
+            encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten()
 
 
     #encoded=torch.zeros(list(M))+0j
@@ -349,7 +368,7 @@ val_cmplx=validation_received[min_SER_iter][:,0]+1j*validation_received[min_SER_
 plt.subplot(132)
 #plt.contourf(mgx,mgy,decision_region_evolution[-1].reshape(mgy.shape).T,cmap='coolwarm',vmin=0.3,vmax=0.7)
 #plt.scatter(validation_received[min_SER_iter][:,0], validation_received[min_SER_iter][:,1], c=y_valid, cmap='tab20',s=4)
-plt.scatter(np.real(val_cmplx), np.imag(val_cmplx), c=y_valid, cmap='tab20',s=4)
+plt.scatter(np.real(val_cmplx), np.imag(val_cmplx), c=comp_valid, cmap='tab20',s=4)
 plt.axis('scaled')
 plt.xlabel(r'$\Re\{r\}$',fontsize=14)
 plt.ylabel(r'$\Im\{r\}$',fontsize=14)
@@ -361,7 +380,7 @@ plt.subplot(133)
 decision_scatter = np.argmax(decision_region_evolution[min_SER_iter], 1)
 plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter, cmap=matplotlib.colors.ListedColormap(colors=new_color_list),s=4)
 #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
-plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=y_valid[0:4000], cmap='tab20',s=4)
+plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=comp_valid[0:4000], cmap='tab20',s=4)
 plt.axis('scaled')
 plt.xlim((-ext_max_plot,ext_max_plot))
 plt.ylim((-ext_max_plot,ext_max_plot))
