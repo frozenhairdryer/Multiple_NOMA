@@ -22,18 +22,19 @@ print("We are using the following device for learning:",device)
 #s_off = [0]                    # sample offset -> model imperfect synchronization
 
 # Training parameters
-num_epochs = 30
+num_epochs = 50
 batches_per_epoch = 300
+learn_rate =0.01
 
 # number of symbols
 M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([15,15])
+EbN0 = np.array([16,16])
 
 # SER weights for training: Change if one SER is more important:
-weight=[1,1]
+weight=np.ones(np.size(M))
 
 # validation set. Training examples are generated on the fly
 N_valid = 10000
@@ -75,8 +76,8 @@ class Encoder(nn.Module):
         # compute output
         encoded = self.network_transmitter(x)
         # compute normalization factor and normalize channel output
-        norm_factor = torch.mean(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize mean amplitude to 1
-        #norm_factor = torch.max(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize max amplitude to 1 -> somehow results in psk?         
+        #norm_factor = torch.mean(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize mean amplitude to 1
+        norm_factor = torch.max(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize max amplitude to 1 -> somehow results in psk?         
         #norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 ) # normalize mean amplitude in real and imag to sqrt(1/2)
         modulated = encoded / norm_factor
         return modulated
@@ -122,8 +123,8 @@ for const in range(np.size(M)):
     enc[const].to(device)
     # Adam Optimizer
     #optimizer.append([])
-    optimizer.append(optim.Adam(enc[const].parameters()))
-    optimizer.append(optim.Adam(dec[const].parameters()))
+    optimizer.append(optim.Adam(enc[const].parameters(), lr=learn_rate))
+    optimizer.append(optim.Adam(dec[const].parameters(), lr=learn_rate))
 
 
 softmax = nn.Softmax(dim=1)
@@ -222,7 +223,15 @@ for epoch in range(num_epochs):
         #print(batch_labels[:,num])
         validation_SERs[num][epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid[:,num])
         print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
+        if validation_SERs[num][epoch]>1/M[num] and epoch>5:
+            #Weight is increased, when error probability is higher than symbol probability -> misclassification 
+            weight[num] += 1
+            weight=weight/np.sum(weight)*np.size(M) # normalize weight sum to 3
+            print("weight changed to "+str(weight))
     
+    if np.sum(validation_SERs[:,epoch])<0.2:
+        weight=np.ones(np.size(M))
+
     validation_received.append(channel.detach().cpu().numpy())
     
     # calculate and store base constellations
@@ -316,11 +325,9 @@ for num in range(np.size(M)):
     plt.subplot(1,np.size(M),num+1)
     decision_scatter = np.argmax(decision_region_evolution[num][min_SER_iter], 1)
     if num==0:
-        plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list))
+        plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:M[num]]))
     else:
-        plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list))
-    
-
+        plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[M[num-1]:M[num-1]+M[num]]))
     #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
     plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
     plt.axis('scaled')
@@ -329,7 +336,8 @@ for num in range(np.size(M)):
     plt.xlabel(r'$\Re\{r\}$',fontsize=14)
     plt.ylabel(r'$\Im\{r\}$',fontsize=14)
     plt.title('Decision regions for Decoder %d' % num,fontsize=16)
-    plt.tight_layout()
+
+plt.tight_layout()
 
 plt.figure("Base Constellations")
 for num in range(np.size(M)):

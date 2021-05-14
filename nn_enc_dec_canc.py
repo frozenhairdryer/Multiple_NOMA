@@ -62,7 +62,7 @@ y_valid = rng.integers(0,M,size=(N_valid,np.size(M)))
 
 
 # meshgrid for plotting
-ext_max = 2  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
+ext_max = 1.5  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
 mgx,mgy = np.meshgrid(np.linspace(-ext_max,ext_max,400), np.linspace(-ext_max,ext_max,400))
 meshgrid = np.column_stack((np.reshape(mgx,(-1,1)),np.reshape(mgy,(-1,1)))) 
 
@@ -71,7 +71,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         # Define Transmitter Layer: Linear function, M input neurons (symbols), 2 output neurons (real and imaginary part)        
         self.fcT1 = nn.Linear(Mod,2*Mod) 
-        #self.fcT2 = nn.Linear(2*Mod, 2*Mod)
+        self.fcT2 = nn.Linear(2*Mod, 2*Mod)
         #self.fcT3 = nn.Linear(2*Mod, 2*Mod) 
         #self.fcT4 = nn.Linear(2*Mod, 2*Mod) 
         self.fcT5 = nn.Linear(2*Mod, 2) 
@@ -92,7 +92,7 @@ class Encoder(nn.Module):
 
     def network_transmitter(self,batch_labels):
         out = self.activation_function(self.fcT1(batch_labels))
-        #out = self.activation_function(self.fcT2(out))
+        out = self.activation_function(self.fcT2(out))
         #out = self.activation_function(self.fcT3(out))
         #out = self.activation_function(self.fcT4(out))
         out = self.activation_function(self.fcT5(out))
@@ -121,7 +121,7 @@ class Decoder(nn.Module):
         out = self.activation_function(self.fcR1(inp))
         #out = self.activation_function(self.fcR2(out))
         #out = self.activation_function(self.fcR3(out))
-        #out = self.activation_function(self.fcR4(out))
+        out = self.activation_function(self.fcR4(out))
         logits = self.activation_function(self.fcR5(out))
         return logits
 
@@ -141,6 +141,9 @@ class Canceller(nn.Module):
     def forward(self, x, decoutput):
         # compute output
         logits = self.cancellation(x, decoutput)
+        #norm_factor = torch.max(torch.abs(torch.view_as_complex(logits)).flatten())
+        norm_factor = torch.mean(torch.abs(torch.view_as_complex(logits)).flatten()) # normalize mean amplitude to 1
+        logits = logits/norm_factor
         return logits
     
     def cancellation(self,inp, decout):
@@ -149,7 +152,7 @@ class Canceller(nn.Module):
         out = self.activation_function(self.fcR1(inp)) + self.activation_function(self.fcR2(decout))
         #out = self.activation_function(self.fcR2(out))
         #out = self.activation_function(self.fcR3(out))
-        #out = self.activation_function(self.fcR4(out))
+        out = self.activation_function(self.fcR4(out))
         logits = self.activation_function(self.fcR5(out))
         return logits
 
