@@ -25,14 +25,14 @@ print("We are using the following device for learning:",device)
 num_epochs = 50
 #random_epochs = 30
 batches_per_epoch = 300
-learn_rate =0.01
+learn_rate =0.005
 
 # number of symbols
 M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([16,16])
+EbN0 = np.array([15,12])
 
 # loss weights for training: Change if one Encoder is more important:
 weight=np.ones(np.size(M))
@@ -53,9 +53,8 @@ def SER(predictions, labels):
 # noise standard deviation
 sigma_n = np.sqrt((1/2/np.log2(M)) * 10**(-EbN0/10))
 
-#SNR = 10*np.log10(1/sigma_n)
-#SNR = EbN0+10*np.log10(np.log2(M))
-#print("Channel SNR is: "+str(SNR)+" dB")
+SNR = EbN0+10*np.log10(np.log2(M))
+print("Channel SNR is: "+str(SNR)+" dB")
 
 # Generate Validation Data
 y_valid = rng.integers(0,M,size=(N_valid,np.size(M)))
@@ -149,7 +148,8 @@ class Canceller(nn.Module):
     def cancellation(self,inp, decout):
         #print(self.activation_function(self.fcR1(inp)))
         #print(self.activation_function(self.fcR2(decout)))
-        out = self.activation_function(self.fcR1(inp)) + self.activation_function(self.fcR2(decout))
+        out = self.activation_function(self.fcR1(inp))
+        out += self.activation_function(self.fcR2(decout))
         #out = self.activation_function(self.fcR2(out))
         #out = self.activation_function(self.fcR3(out))
         out = self.activation_function(self.fcR4(out))
@@ -188,6 +188,9 @@ batch_size_per_epoch = np.linspace(100,10000,num=num_epochs)
 validation_SERs = np.zeros((np.size(M),num_epochs))
 validation_received = []
 decision_region_evolution = []
+for num in range(np.size(M)):
+    decision_region_evolution.append([])
+
 constellations = []
 cancelled=[]
 
@@ -208,15 +211,16 @@ for epoch in range(num_epochs):
             batch_labels[:,num].random_(M[num])
             batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), M[num], device=device)
             batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,num].long()]=1
-            
             if num==0:
                 # Propagate (training) data through the first transmitter
                 modulated = enc[0](batch_labels_onehot)
+                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
                 # Propagate through channel 1
-                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
             else:
                 modulated = torch.view_as_real(torch.view_as_complex(received)*(torch.view_as_complex(enc[num](batch_labels_onehot))))
-                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
+                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
             
             if num==np.size(M)-1:
                 for dnum in range(np.size(M)):
@@ -247,7 +251,7 @@ for epoch in range(num_epochs):
                 loss = weight[0]*loss_fn(decoded[0], batch_labels[:,0].long())
             else:
                 loss += weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
-                #loss -= loss_fn(cancelled, batch_labels[:,num-1].long()) # maximize cross-Entropy of canceller output and already decoded signal
+                #loss -= loss_fn(decoded[num], batch_labels[:,num-1].long()) # maximize cross-Entropy of canceller output (here further: decoder output) and already decoded signal
             
         # compute gradients
         
@@ -270,14 +274,17 @@ for epoch in range(num_epochs):
     cancelled.append([])
     for num in range(np.size(M)):
         y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
+        
         if num==0:
             encoded = enc[num](torch.Tensor(y_valid_onehot).to(device))
-            channel = torch.add(encoded, sigma_n[0]*torch.randn(len(encoded),2).to(device))
+            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
             # color map for plot
             cvalid=y_valid[:,num]
         else:
             encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](torch.Tensor(y_valid_onehot).to(device)))))
-            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
+            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
             #color map for plot
             cvalid= cvalid+M[num]*y_valid[:,num]
         if num==np.size(M)-1:
@@ -290,7 +297,7 @@ for epoch in range(num_epochs):
                         decoded_valid.append(dec[dnum](cancelled[epoch][dnum-1]))
                     else:
                         decoded_valid.append(dec[dnum](cancelled[epoch][dnum-1]))
-                        cancelled[epoch].append(canc[dnum](received,enc[dnum](decoded[dnum-1])))
+                        cancelled[epoch].append(canc[dnum](received,enc[dnum](decoded_valid[dnum])))
 
     
 
@@ -332,8 +339,11 @@ for epoch in range(num_epochs):
         
     # store decision region for generating the animation
     for num in range(np.size(M)):
-        decision_region_evolution.append([])
-        mesh_prediction = softmax(dec[num](torch.Tensor(meshgrid).to(device)))
+        #decision_region_evolution.append([])
+        if num==0:
+            mesh_prediction = softmax(dec[num](torch.Tensor(meshgrid).to(device)))
+        else:
+            mesh_prediction = softmax(dec[num](canc[num-1](torch.Tensor(meshgrid).to(device),enc[num-1](dec[num-1](torch.Tensor(meshgrid).to(device))))))
         decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
     
 print('Training finished')
@@ -406,9 +416,10 @@ for num in range(np.size(M)):
         plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:M[num]]))
         plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
     else:
-        vals=cancelled[min_SER_iter][num-1][:,0].detach().numpy()+1j*cancelled[min_SER_iter][num-1][:,1].detach().numpy()
+        #vals=cancelled[min_SER_iter][num-1][:,0].detach().numpy()+1j*cancelled[min_SER_iter][num-1][:,1].detach().numpy()
         plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[M[num-1]:M[num-1]+M[num]]))
-        plt.scatter(np.real(vals[0:4000]), np.imag(vals[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
+        #plt.scatter(np.real(vals[0:4000]), np.imag(vals[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
+        plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
 
     #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
         

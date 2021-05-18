@@ -31,7 +31,7 @@ M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([16,16])
+EbN0 = np.array([15,12])
 
 # SER weights for training: Change if one SER is more important:
 weight=np.ones(np.size(M))
@@ -163,11 +163,13 @@ for epoch in range(num_epochs):
             if num==0:
                 # Propagate (training) data through the first transmitter
                 modulated = enc[0](batch_labels_onehot)
+                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
                 # Propagate through channel 1
-                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
             else:
                 modulated = torch.view_as_real(torch.view_as_complex(received)*(torch.view_as_complex(enc[num](batch_labels_onehot))))
-                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
+                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
             
             if num==np.size(M)-1:
                 for dnum in range(np.size(M)):
@@ -203,12 +205,14 @@ for epoch in range(num_epochs):
         y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
         if num==0:
             encoded = enc[num](torch.Tensor(y_valid_onehot).to(device))
-            channel = torch.add(encoded, sigma_n[0]*torch.randn(len(encoded),2).to(device))
+            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
             # color map for plot
             cvalid=y_valid[:,num]
         else:
             encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](torch.Tensor(y_valid_onehot).to(device)))))
-            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
+            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
             #color map for plot
             cvalid= cvalid+M[num]*y_valid[:,num]
         if num==np.size(M)-1:
