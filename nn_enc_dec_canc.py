@@ -32,7 +32,7 @@ M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([15,12])
+EbN0 = np.array([16,14])
 
 # loss weights for training: Change if one Encoder is more important:
 weight=np.ones(np.size(M))
@@ -105,7 +105,7 @@ class Decoder(nn.Module):
         self.fcR1 = nn.Linear(2,2*Mod) 
         #self.fcR2 = nn.Linear(2*Mod,2*Mod) 
         #self.fcR3 = nn.Linear(2*Mod,2*Mod) 
-        self.fcR4 = nn.Linear(2*Mod,2*Mod) 
+        #self.fcR4 = nn.Linear(2*Mod,2*Mod) 
         self.fcR5 = nn.Linear(2*Mod, Mod) 
 
         # Non-linearity (used in transmitter and receiver)
@@ -120,7 +120,7 @@ class Decoder(nn.Module):
         out = self.activation_function(self.fcR1(inp))
         #out = self.activation_function(self.fcR2(out))
         #out = self.activation_function(self.fcR3(out))
-        out = self.activation_function(self.fcR4(out))
+        #out = self.activation_function(self.fcR4(out))
         logits = self.activation_function(self.fcR5(out))
         return logits
 
@@ -226,12 +226,12 @@ for epoch in range(num_epochs):
                 for dnum in range(np.size(M)):
                     if dnum==0:
                         decoded.append(dec[dnum](received))
-                        cancelled_train=(canc[dnum](received,enc[dnum](decoded[0])))
+                        cancelled_train=(canc[dnum](received,enc[dnum](softmax(decoded[0]))))
                     elif dnum==np.size(M)-1:
                         decoded.append(dec[dnum](cancelled_train))
                     else:
                         decoded.append(dec[dnum](cancelled_train))
-                        cancelled_train=(canc[dnum](received,enc[dnum](decoded[dnum-1])))
+                        cancelled_train=(canc[dnum](received,enc[dnum](softmax(decoded[dnum-1]))))
                     
 
         # Calculate Loss
@@ -292,7 +292,7 @@ for epoch in range(num_epochs):
                     if dnum==0:
                         decoded_valid.append(dec[dnum](channel))
                         # canceller
-                        cancelled[epoch].append(canc[dnum](channel,enc[dnum](decoded_valid[dnum])))
+                        cancelled[epoch].append(canc[dnum](channel,enc[dnum](softmax(decoded_valid[dnum]))))
                     elif dnum==np.size(M)-1:
                         decoded_valid.append(dec[dnum](cancelled[epoch][dnum-1]))
                     else:
@@ -343,8 +343,8 @@ for epoch in range(num_epochs):
         if num==0:
             mesh_prediction = softmax(dec[num](torch.Tensor(meshgrid).to(device)))
         else:
-            mesh_prediction = softmax(dec[num](canc[num-1](torch.Tensor(meshgrid).to(device),enc[num-1](dec[num-1](torch.Tensor(meshgrid).to(device))))))
-        decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+            mesh_prediction = softmax(dec[num](canc[num-1](torch.Tensor(meshgrid).to(device),enc[num-1](mesh_prediction))))
+        decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() +0.4)
     
 print('Training finished')
 

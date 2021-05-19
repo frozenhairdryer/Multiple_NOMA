@@ -31,7 +31,7 @@ M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([15,12])
+EbN0 = np.array([16,14])
 
 # SER weights for training: Change if one SER is more important:
 weight=np.ones(np.size(M))
@@ -284,12 +284,13 @@ plt.rc('text', usetex=True)
     
     
 for num in range(np.size(M)):
-    plt.plot(validation_SERs[num],marker='.',linestyle='--')
+    plt.plot(validation_SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
     plt.scatter(min_SER_iter,validation_SERs[num][min_SER_iter],marker='o',c='red')
     plt.annotate('Min', (0.95*min_SER_iter,1.4*validation_SERs[num][min_SER_iter]),c='red')
 plt.xlabel('epoch no.',fontsize=14)
 plt.ylabel('SER',fontsize=14)
 plt.grid(which='both')
+plt.legend(loc=1)
 plt.title('SER on Validation Dataset',fontsize=16)
 
 print('Minimum SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(validation_SERs[0])))
