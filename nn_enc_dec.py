@@ -1,6 +1,10 @@
 # Code adapted from: 
 # L. Schmalen, M. L. Schmid, and B. Geiger, "Machine Learning and Optimization in Communications - Lecture Examples," available online at http://www.github.org/KIT-CEL/lecture-examples/, 2019
 
+for element in dir():
+    if element[0:2] != "__":
+        if element[0:4] != "list" and  element!="runs" and element!="compare_data": 
+            del globals()[element]
 
 import torch
 import torch.nn as nn
@@ -8,6 +12,7 @@ import torch.optim as optim
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import pickle
 rng = np.random.default_rng()
 
 torch.autograd.set_detect_anomaly(True) # find problems computing the gradient
@@ -24,7 +29,7 @@ print("We are using the following device for learning:",device)
 # Training parameters
 num_epochs = 50
 batches_per_epoch = 300
-learn_rate =0.01
+learn_rate =0.005
 
 # number of symbols
 M = np.array([4,4])
@@ -365,5 +370,5 @@ for num in range(np.size(M)):
 
 
 
-plt.show()
+#plt.show()
 #plt.savefig('decision_region_AWGN_AE_EbN0%1.1f_M%d.pdf' % (EbN0,M), bbox_inches='tight')

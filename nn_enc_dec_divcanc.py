@@ -1,6 +1,10 @@
 # Code adapted from: 
 # L. Schmalen, M. L. Schmid, and B. Geiger, "Machine Learning and Optimization in Communications - Lecture Examples," available online at http://www.github.org/KIT-CEL/lecture-examples/, 2019
 
+for element in dir():
+    if element[0:2] != "__":
+        if element[0:4] != "list" and  element!="runs" and element!="compare_data": 
+            del globals()[element]
 
 import torch
 import torch.nn as nn
@@ -8,12 +12,16 @@ import torch.optim as optim
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import pickle
 rng = np.random.default_rng()
 
 torch.autograd.set_detect_anomaly(True) # find problems computing the gradient
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print("We are using the following device for learning:",device)
+
+
+
 
 ###############################################################
 ### Parameters ###
@@ -24,7 +32,7 @@ print("We are using the following device for learning:",device)
 # Training parameters
 num_epochs = 50
 batches_per_epoch = 300
-learn_rate =0.005
+learn_rate =0.005 # fix to 0.005 for better convergence
 
 # number of symbols
 M = np.array([4,4])
@@ -175,10 +183,10 @@ for epoch in range(num_epochs):
                 for dnum in range(np.size(M)):
                     if dnum==0:
                         decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](received))
-                        cancelled = received/enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))
+                        cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
                     else:
                         decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                        cancelled = cancelled/enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))
+                        cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
 
         # Calculate Loss
         for num in range(np.size(M)):
@@ -225,10 +233,10 @@ for epoch in range(num_epochs):
                 for dnum in range(np.size(M)):
                     if dnum==0:
                         decoded_valid[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](channel)
-                        cancelled = channel/enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))
+                        cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
                     else:
                         decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                        cancelled = cancelled/enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))
+                        cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
 
 
     
@@ -274,10 +282,10 @@ for epoch in range(num_epochs):
         decision_region_evolution.append([])
         if num==0:
             mesh_prediction = softmax(dec[np.size(M)-num-1].network_receiver(torch.Tensor(meshgrid).to(device)))
-            canc_grid = torch.Tensor(meshgrid).to(device)/enc[np.size(M)-num-1](mesh_prediction)
+            canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[np.size(M)-num-1](mesh_prediction)))
         else:
             mesh_prediction = softmax(dec[np.size(M)-num-1].network_receiver(canc_grid))
-            canc_grid = canc_grid/enc[np.size(M)-num-1](mesh_prediction)
+            canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[np.size(M)-num-1](mesh_prediction)))
         decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
     
 print('Training finished')
@@ -382,5 +390,5 @@ for num in range(np.size(M)):
 
 
 
-plt.show()
+#plt.show()
 #plt.savefig('decision_region_AWGN_AE_EbN0%1.1f_M%d.pdf' % (EbN0,M), bbox_inches='tight')
