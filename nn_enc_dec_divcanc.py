@@ -247,14 +247,14 @@ for epoch in range(num_epochs):
         #print(batch_labels[:,num])
         validation_SERs[num][epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid[:,num])
         print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
-        if validation_SERs[num][epoch]>1/M[num] and epoch>5:
-            #Weight is increased, when error probability is higher than symbol probability -> misclassification 
-            weight[num] += 1
-            weight=weight/np.sum(weight)*np.size(M) # normalize weight sum to 3
-            print("weight changed to "+str(weight))
+    #    if validation_SERs[num][epoch]>1/M[num] and epoch>5:
+    #        #Weight is increased, when error probability is higher than symbol probability -> misclassification 
+    #        weight[num] += 1
+    #        weight=weight/np.sum(weight)*np.size(M) # normalize weight sum to 3
+    #        print("weight changed to "+str(weight))
     
-    if np.sum(validation_SERs[:,epoch])<0.2:
-        weight=np.ones(np.size(M))
+    #if np.sum(validation_SERs[:,epoch])<0.2:
+    #    weight=np.ones(np.size(M))
 
     validation_received.append(channel.detach().cpu().numpy())
     

@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import pickle
+from functions import MI
 rng = np.random.default_rng()
 
 torch.autograd.set_detect_anomaly(True) # find problems computing the gradient
@@ -36,7 +37,9 @@ M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([16,14])
+sigma_n=np.array([0.1,0.1])
+SNR = np.zeros(np.size(M))
+#EbN0 = np.array([16,14])
 
 # SER weights for training: Change if one SER is more important:
 weight=np.ones(np.size(M))
@@ -52,9 +55,8 @@ def SER(predictions, labels):
     return (np.sum(s2 != labels) / predictions.shape[0])
 
 
-
 # noise standard deviation
-sigma_n = np.sqrt((1/2/np.log2(M)) * 10**(-EbN0/10))
+#sigma_n = np.sqrt((1/2/np.log2(M)) * 10**(-EbN0/10))
 
 
 # Generate Validation Data
@@ -168,13 +170,13 @@ for epoch in range(num_epochs):
             if num==0:
                 # Propagate (training) data through the first transmitter
                 modulated = enc[0](batch_labels_onehot)
-                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
+                #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
                 # Propagate through channel 1
-                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
+                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             else:
                 modulated = torch.view_as_real(torch.view_as_complex(received)*(torch.view_as_complex(enc[num](batch_labels_onehot))))
-                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
-                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
+                #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
+                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             
             if num==np.size(M)-1:
                 for dnum in range(np.size(M)):
@@ -210,14 +212,16 @@ for epoch in range(num_epochs):
         y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
         if num==0:
             encoded = enc[num](torch.Tensor(y_valid_onehot).to(device))
-            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
-            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
+            #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/sigma_n[num])
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
             # color map for plot
             cvalid=y_valid[:,num]
         else:
             encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](torch.Tensor(y_valid_onehot).to(device)))))
-            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
-            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
+            SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/sigma_n[num])
+            #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
             #color map for plot
             cvalid= cvalid+M[num]*y_valid[:,num]
         if num==np.size(M)-1:
@@ -232,12 +236,19 @@ for epoch in range(num_epochs):
         #print(batch_labels[:,num])
         validation_SERs[num][epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid[:,num])
         print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
-        if validation_SERs[num][epoch]>1/M[num] and epoch>5:
+        #if validation_SERs[num][epoch]>1/M[num] and epoch>5:
             #Weight is increased, when error probability is higher than symbol probability -> misclassification 
-            weight[num] += 1
-            weight=weight/np.sum(weight)*np.size(M) # normalize weight sum to 3
-            print("weight changed to "+str(weight))
-    
+            #weight[num] += 1
+        if num==0:
+            GMI=MI(out_valid, y_valid[:,num])
+        else:
+            GMI += MI(out_valid, y_valid[:,num])
+    #weight=weight/np.sum(weight)*np.size(M) # normalize weight sum
+    #print("weights set to "+str(weight))
+    print("GMI is: "+ str(GMI.data.detach()) + " bit")
+
+    print("SNR is: "+ str(SNR)+" dB")
+
     if np.sum(validation_SERs[:,epoch])<0.2:
         weight=np.ones(np.size(M))
 
@@ -370,5 +381,5 @@ for num in range(np.size(M)):
 
 
 
-#plt.show()
+plt.show()
 #plt.savefig('decision_region_AWGN_AE_EbN0%1.1f_M%d.pdf' % (EbN0,M), bbox_inches='tight')

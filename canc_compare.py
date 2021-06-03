@@ -38,9 +38,9 @@ for item in range(runs):
     plt.close('all')
 
 ## save all data if further processing is wanted
-with open('cancel_compare_data.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+with open('cancel_compare_data_noweight2.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
     pickle.dump(compare_data, f)
-with open('cancel_compare_lists.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+with open('cancel_compare_lists_noweigth2.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
     pickle.dump([list_nocanc,list_divcanc,list_nncanc], f)
 
 
@@ -52,7 +52,7 @@ color_list = base.colors
 
 
 print(np.shape(np.array(list_nocanc)))
-plt.figure(figsize=(7,3))
+plt.figure(figsize=(10,6))
 
 for item in range(runs):
     plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -81,8 +81,8 @@ for item in range(runs):
         average_nncanc0+=1/runs*list_nncanc[item][:][0]
         average_nncanc1+=1/runs*list_nncanc[item][:][1]
 
-print(list_nocanc)
-print(np.min(list_nocanc, axis=1))
+#print(list_nocanc)
+#print(np.min(list_nocanc, axis=1))
 
 plt.plot(average_nocanc0, c=color_list[0],linewidth=3, label="Enc"+str(0)+" no cancellation")
 plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
@@ -101,6 +101,6 @@ plt.yscale('log')
 plt.ylabel('log(SER)')
 plt.grid()
 plt.tight_layout()
-plt.savefig('cancell_compare.png')
+plt.savefig('cancell_compare_noweight2.png')
 plt.show()
 

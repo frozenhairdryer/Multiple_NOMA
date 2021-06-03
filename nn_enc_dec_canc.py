@@ -37,7 +37,7 @@ M = np.array([4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([16,15])
+EbN0 = np.array([16,14])
 
 # loss weights for training: Change if one Encoder is more important:
 weight=np.ones(np.size(M))
@@ -244,17 +244,6 @@ for epoch in range(num_epochs):
 
         # Calculate Loss
         for num in range(np.size(M)):
-            # if one is stuck we give an incentive to train that encoder (done when evaluating the SERs)
-            # if epoch ==10:
-            #     weight=[2,0.5,0.5]
-            # elif epoch ==15:
-            #     weight=[0.5,2,0.5]
-            # elif epoch ==20:
-            #     weight=[0.5,0.5,2]
-            # else:
-            #     weight=[1,1,1]
-            
-            # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
             if num==0:
                 loss = weight[0]*loss_fn(decoded[0], batch_labels[:,0].long())
             else:
@@ -314,14 +303,15 @@ for epoch in range(num_epochs):
         #print(batch_labels[:,num])
         validation_SERs[num][epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid[:,num])
         print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))
-        if validation_SERs[num][epoch]>1/M[num] and epoch>5:
+        #if validation_SERs[num][epoch]>1/M[num] and epoch>5:
             #Weight is increased, when error probability is higher than symbol probability -> misclassification 
-            weight[num] += 1
-            weight=weight/np.sum(weight)*np.size(M) # normalize weight sum to 3
-            print("weight changed to "+str(weight))
+            #weight[num] += 1
+            
+    #weight=weight/np.sum(weight)*np.size(M) # normalize weight sum
+    #print("weight changed to "+str(weight))
     
-    if np.sum(validation_SERs[:,epoch])<0.2:
-        weight=np.ones(np.size(M))
+    #if np.sum(validation_SERs[:,epoch])<0.2:
+    #    weight=np.ones(np.size(M))
 
     
     validation_received.append(channel.detach().cpu().numpy())

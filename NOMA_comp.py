@@ -29,15 +29,16 @@ print("We are using the following device for learning:",device)
 # Training parameters
 num_epochs = 50
 batches_per_epoch = 300
-learn_rate =0.01
+learn_rate =0.005
 
 # number of symbols
-M = np.array([4,4])
-alpha=[1,1/3*np.sqrt(2)]
+M = np.array([4,4,4])
+alpha=[1,2/3*np.sqrt(2),np.sqrt(2)*2/9]
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([16,14])
+EbN0 = np.array([60,60,22])
+
 
 # SER weights for training: Change if one SER is more important:
 weight=np.ones(np.size(M))
@@ -73,6 +74,7 @@ class Encoder(nn.Module):
         # Define Transmitter Layer: Linear function, M input neurons (symbols), 2 output neurons (real and imaginary part)        
         self.fcT1 = nn.Linear(M,2*M) 
         self.fcT2 = nn.Linear(2*M, 2*M) 
+        self.fcT3 = nn.Linear(2*M, 2*M) 
         self.fcT5 = nn.Linear(2*M, 2)
         self.alpha=alph
 
@@ -96,6 +98,7 @@ class Encoder(nn.Module):
     def network_transmitter(self,batch_labels):
         out = self.activation_function(self.fcT1(batch_labels))
         out = self.activation_function(self.fcT2(out))
+        #out = self.activation_function(self.fcT3(out))
         out = self.activation_function(self.fcT5(out))
         return out
     
@@ -106,6 +109,7 @@ class Decoder(nn.Module):
         # Define Receiver Layer: Linear function, 2 input neurons (real and imaginary part), M output neurons (symbols)
         self.fcR1 = nn.Linear(2,2*M) 
         self.fcR2 = nn.Linear(2*M,2*M) 
+        self.fcR3 = nn.Linear(2*M,2*M) 
         self.fcR5 = nn.Linear(2*M, M) 
 
         # Non-linearity (used in transmitter and receiver)
@@ -119,6 +123,7 @@ class Decoder(nn.Module):
     def network_receiver(self,inp):
         out = self.activation_function(self.fcR1(inp))
         out = self.activation_function(self.fcR2(out))
+        #out = self.activation_function(self.fcR3(out))
         logits = self.activation_function(self.fcR5(out))
         return logits
     
@@ -189,7 +194,9 @@ for epoch in range(num_epochs):
             # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
             if num==0:
                 loss = weight[0]*loss_fn(decoded[0], batch_labels[:,0].long())
-            else:
+            elif epoch>3 and num==2:
+                loss += weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
+            elif epoch >10 and num==3:
                 loss += weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
             
         # compute gradients
@@ -239,8 +246,8 @@ for epoch in range(num_epochs):
         if validation_SERs[num][epoch]>1/M[num] and epoch>5:
             #Weight is increased, when error probability is higher than symbol probability -> misclassification 
             weight[num] += 1
-            weight=weight/np.sum(weight)*np.size(M) # normalize weight sum to 3
-            print("weight changed to "+str(weight))
+    weight=weight/np.sum(weight)*np.size(M) # normalize weight sum 
+    print("weight set to "+str(weight))
     
     if np.sum(validation_SERs[:,epoch])<0.2:
         weight=np.ones(np.size(M))
