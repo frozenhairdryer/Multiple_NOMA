@@ -32,13 +32,14 @@ batches_per_epoch = 300
 learn_rate =0.005
 
 # number of symbols
-M = np.array([4,4,4])
-alpha=[1,2/3*np.sqrt(2),np.sqrt(2)*2/9]
+M = np.array([4,4])
+alpha=[1,2/3*np.sqrt(2)]#,np.sqrt(2)*2/9]
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([60,60,22])
-
+#EbN0 = np.array([16.14])
+sigma_n=np.array([0.1,0.1])
+SNR = np.zeros(np.size(M))
 
 # SER weights for training: Change if one SER is more important:
 weight=np.ones(np.size(M))
@@ -177,13 +178,13 @@ for epoch in range(num_epochs):
             if num==0:
                 # Propagate (training) data through the first transmitter
                 modulated = enc[0](batch_labels_onehot)
-                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
+                #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
                 # Propagate through channel 1
-                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
+                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             else:
                 modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels_onehot)))))
-                sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
-                received = torch.add(modulated, sigma*torch.randn(len(modulated),2).to(device))
+                #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(modulated).detach().numpy()))
+                received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
             
             if num==np.size(M)-1:
                 for dnum in range(np.size(M)):
@@ -194,10 +195,9 @@ for epoch in range(num_epochs):
             # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
             if num==0:
                 loss = weight[0]*loss_fn(decoded[0], batch_labels[:,0].long())
-            elif epoch>3 and num==2:
+            else:
                 loss += weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
-            elif epoch >10 and num==3:
-                loss += weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
+            
             
         # compute gradients
         
@@ -221,14 +221,16 @@ for epoch in range(num_epochs):
         y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
         if num==0:
             encoded = enc[num](torch.Tensor(y_valid_onehot).to(device))
-            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
-            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
+            #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/sigma_n[num])
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
             # color map for plot
             cvalid=y_valid[:,num]
         else:
             encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](torch.Tensor(y_valid_onehot).to(device)))))
-            sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
-            channel = torch.add(encoded, sigma*torch.randn(len(encoded),2).to(device))
+            #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
+            SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/sigma_n[num])
+            channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
             #color map for plot
             cvalid= cvalid+M[num]*y_valid[:,num]
         if num==np.size(M)-1:

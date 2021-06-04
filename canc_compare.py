@@ -84,16 +84,44 @@ for item in range(runs):
 #print(list_nocanc)
 #print(np.min(list_nocanc, axis=1))
 
+# variance:
+
+for item in range(runs):
+    if item==0:
+        var_nocanc0=(list_nocanc[item][:][0]-average_nocanc0)**2/runs
+        var_nocanc1=(list_nocanc[item][:][1]-average_nocanc1)**2/runs
+        var_dcanc0=(list_divcanc[item][:][0]-average_dcanc0)**2/runs
+        var_dcanc1=(list_divcanc[item][:][1]-average_dcanc1)**2/runs
+        var_nncanc0=(list_nncanc[item][:][0]-average_nocanc0)**2/runs
+        var_nncanc1=(list_nncanc[item][:][1]-average_nocanc1)**2/runs
+    else:
+        var_nocanc0+=(list_nocanc[item][:][0]-average_nocanc0)**2/runs
+        var_nocanc1+=(list_nocanc[item][:][1]-average_nocanc1)**2/runs
+        var_dcanc0+=(list_divcanc[item][:][0]-average_dcanc0)**2/runs
+        var_dcanc1+=(list_divcanc[item][:][1]-average_dcanc1)**2/runs
+        var_nncanc0+=(list_nncanc[item][:][0]-average_nocanc0)**2/runs
+        var_nncanc1+=(list_nncanc[item][:][1]-average_nocanc1)**2/runs
+
+
+
 plt.plot(average_nocanc0, c=color_list[0],linewidth=3, label="Enc"+str(0)+" no cancellation")
 plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
 
+plt.fill_between(np.arange(num_epochs), average_nocanc0+var_nocanc0,average_nocanc0-var_nocanc0, color=color_list[0], alpha=0.2)
+plt.fill_between(np.arange(num_epochs), average_nocanc1+var_nocanc1,average_nocanc1-var_nocanc1, color=color_list[2], alpha=0.2)
 
 plt.plot(average_dcanc0, c=color_list[4], linewidth=3, label="Enc"+str(0)+" division cancellation")
 plt.plot(average_dcanc1, c=color_list[6], linewidth=3, label="Enc"+str(1)+" division cancellation")
 
+plt.fill_between(np.arange(num_epochs), average_dcanc0+var_dcanc0,average_dcanc0-var_dcanc0, color=color_list[4], alpha=0.2)
+plt.fill_between(np.arange(num_epochs), average_dcanc1+var_dcanc1,average_dcanc1-var_dcanc1, color=color_list[6], alpha=0.2)
+
 
 plt.plot(average_nncanc0, c=color_list[8],linewidth=3, label="Enc"+str(0)+" NN cancellation")
 plt.plot(average_nncanc1, c=color_list[10],linewidth=3, label="Enc"+str(1)+" NN cancellation")
+
+plt.fill_between(np.arange(num_epochs), average_nncanc0+var_nncanc0,average_nncanc0-var_nncanc0, color=color_list[8], alpha=0.2)
+plt.fill_between(np.arange(num_epochs), average_nncanc1+var_nncanc1,average_nncanc1-var_nncanc1, color=color_list[10], alpha=0.2)
 
 plt.title("Training SERs for different cancellation approaches")
 plt.legend(loc=1)
@@ -101,6 +129,6 @@ plt.yscale('log')
 plt.ylabel('log(SER)')
 plt.grid()
 plt.tight_layout()
-plt.savefig('cancell_compare_noweight2.png')
+plt.savefig('cancell_comparet.png')
 plt.show()
 

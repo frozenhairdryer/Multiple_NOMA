@@ -1,10 +1,10 @@
 # Code adapted from: 
 # L. Schmalen, M. L. Schmid, and B. Geiger, "Machine Learning and Optimization in Communications - Lecture Examples," available online at http://www.github.org/KIT-CEL/lecture-examples/, 2019
 
-for element in dir():
-    if element[0:2] != "__":
-        if element[0:4] != "list" and  element!="runs" and element!="compare_data": 
-            del globals()[element]
+#for element in dir():
+#    if element[0:2] != "__":
+#        if element[0:4] != "list" and  element!="runs" and element!="compare_data": 
+#            del globals()[element]
 
 import torch
 import torch.nn as nn
@@ -28,7 +28,7 @@ print("We are using the following device for learning:",device)
 #s_off = [0]                    # sample offset -> model imperfect synchronization
 
 # Training parameters
-num_epochs = 50
+num_epochs = 30
 batches_per_epoch = 300
 learn_rate =0.005
 
@@ -236,16 +236,17 @@ for epoch in range(num_epochs):
         #print(batch_labels[:,num])
         validation_SERs[num][epoch] = SER(out_valid.detach().cpu().numpy().squeeze(), y_valid[:,num])
         print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
-        #if validation_SERs[num][epoch]>1/M[num] and epoch>5:
+        if validation_SERs[num][epoch]>1/M[num] and epoch>5:
             #Weight is increased, when error probability is higher than symbol probability -> misclassification 
-            #weight[num] += 1
+            weight[num] += 1
         if num==0:
             GMI=MI(out_valid, y_valid[:,num])
         else:
             GMI += MI(out_valid, y_valid[:,num])
-    #weight=weight/np.sum(weight)*np.size(M) # normalize weight sum
-    #print("weights set to "+str(weight))
-    print("GMI is: "+ str(GMI.data.detach()) + " bit")
+    weight=weight/np.sum(weight)*np.size(M) # normalize weight sum
+    print("weights set to "+str(weight))
+
+    print("GMI is: "+ str(GMI.data.detach().numpy()) + " bit")
 
     print("SNR is: "+ str(SNR)+" dB")
 
@@ -381,5 +382,5 @@ for num in range(np.size(M)):
 
 
 
-plt.show()
+#plt.show()
 #plt.savefig('decision_region_AWGN_AE_EbN0%1.1f_M%d.pdf' % (EbN0,M), bbox_inches='tight')

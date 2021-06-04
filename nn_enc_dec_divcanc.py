@@ -1,10 +1,10 @@
 # Code adapted from: 
 # L. Schmalen, M. L. Schmid, and B. Geiger, "Machine Learning and Optimization in Communications - Lecture Examples," available online at http://www.github.org/KIT-CEL/lecture-examples/, 2019
 
-for element in dir():
-    if element[0:2] != "__":
-        if element[0:4] != "list" and  element!="runs" and element!="compare_data": 
-            del globals()[element]
+#for element in dir():
+#    if element[0:2] != "__":
+#        if element[0:4] != "list" and  element!="runs" and element!="compare_data": 
+#            del globals()[element]
 
 import torch
 import torch.nn as nn
@@ -30,7 +30,7 @@ print("We are using the following device for learning:",device)
 #s_off = [0]                    # sample offset -> model imperfect synchronization
 
 # Training parameters
-num_epochs = 50
+num_epochs = 30
 batches_per_epoch = 300
 learn_rate =0.005 # fix to 0.005 for better convergence
 

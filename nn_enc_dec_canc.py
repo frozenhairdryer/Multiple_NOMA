@@ -27,7 +27,7 @@ print("We are using the following device for learning:",device)
 #s_off = [0]                    # sample offset -> model imperfect synchronization
 
 # Training parameters
-num_epochs = 50
+num_epochs = 30
 #random_epochs = 30
 batches_per_epoch = 300
 learn_rate =0.005
