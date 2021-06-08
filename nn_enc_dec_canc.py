@@ -33,11 +33,11 @@ batches_per_epoch = 300
 learn_rate =0.005
 
 # number of symbols
-M = np.array([4,4])
+M = np.array([4,4,4])
 M_all = np.product(M)
 
 # Definition of noise
-EbN0 = np.array([16,14])
+EbN0 = np.array([80,80,20])
 
 # loss weights for training: Change if one Encoder is more important:
 weight=np.ones(np.size(M))
@@ -151,8 +151,8 @@ class Canceller(nn.Module):
         return logits
     
     def cancellation(self,inp, decout):
-        #print(self.activation_function(self.fcR1(inp)))
-        #print(self.activation_function(self.fcR2(decout)))
+        print(self.activation_function(self.fcR1(inp)))
+        print(self.activation_function(self.fcR2(decout)))
         out = self.activation_function(self.fcR1(inp))
         out += self.activation_function(self.fcR2(decout))
         #out = self.activation_function(self.fcR2(out))
@@ -294,7 +294,7 @@ for epoch in range(num_epochs):
                         decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[epoch][dnum-1]))
                     else:
                         decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[epoch][dnum-1]))
-                        cancelled[epoch].append(canc[dnum](received,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
+                        cancelled[epoch].append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
 
     
 

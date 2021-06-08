@@ -33,11 +33,11 @@ batches_per_epoch = 300
 learn_rate =0.005
 
 # number of symbols
-M = np.array([4,4])
+M = np.array([4,4,4])
 M_all = np.product(M)
 
 # Definition of noise
-sigma_n=np.array([0.1,0.1])
+sigma_n=np.array([0.0001,0.0001,0.001])
 SNR = np.zeros(np.size(M))
 #EbN0 = np.array([16,14])
 
@@ -382,5 +382,5 @@ for num in range(np.size(M)):
 
 
 
-#plt.show()
+plt.show()
 #plt.savefig('decision_region_AWGN_AE_EbN0%1.1f_M%d.pdf' % (EbN0,M), bbox_inches='tight')

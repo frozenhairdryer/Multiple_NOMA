@@ -1,4 +1,5 @@
 from os import error
+from numpy.core.fromnumeric import argmax
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -56,7 +57,7 @@ class Canceller(nn.Module):
         super(Canceller, self).__init__()
         self.fcR1 = nn.Linear(2,Mod) 
         self.fcR2 = nn.Linear(2,Mod) 
-        self.fcR3 = nn.Linear(Mod,Mod) 
+        #self.fcR3 = nn.Linear(Mod,Mod) 
         self.fcR4 = nn.Linear(Mod,Mod) 
         self.fcR5 = nn.Linear(Mod, 2) 
 
@@ -85,29 +86,35 @@ def SER(predictions, labels):
 
 def MI(predictions, labels):
     px=torch.bincount(torch.tensor(labels))/np.size(labels)
-    py=torch.sum(predictions, axis=0)/np.size(labels)
+    py=np.sum(predictions, axis=0)/np.size(labels)
     pxy = torch.zeros((len(px),len(px)))
+    #print(s_hat)
     for elem in range(len(labels)):
         pxy[labels[elem]] += predictions[elem]/len(labels)
-    
-    info=pxy*torch.log2(pxy/(py*px))
+
+    info=torch.zeros((len(px),len(px)))
+    #print(info)
     for elemx in range(len(px)):
         for elemy in range(len(px)):
             info[elemx,elemy]=pxy[elemx,elemy]*torch.log2(pxy[elemx,elemy]/(py[elemx]*px[elemy]))
+            if info[elemx,elemy].isnan():
+                info[elemx,elemy]=0
+    #print(info)
     infos=sum(sum(info))
     return infos
 
-def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modradius=1, plotting=True):
+def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True):
     # train_params=[num_epochs,batches_per_epoch, learn_rate]
-    # canc is the chosen cancellation method:
-    # division cancellation: canc='div'
-    # no cancellation: canc='none'
-    # cancellation with neural network: canc='nn'
+    # canc_method is the chosen cancellation method:
+    # division cancellation: canc_method='div'
+    # no cancellation: canc_method='none'
+    # cancellation with neural network: canc_method='nn'
     # modradius is the permitted signal amplitude for each encoder
     # M, sigma_n, modradius are lists of the same size
     if len(M)!=len(sigma_n) or len(M)!=len(modradius):
         raise error("M, sigma_n, modradius need to be of same size!")
     
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     num_epochs=train_params[0]
     batches_per_epoch=train_params[1]
@@ -129,7 +136,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
     dec=[]
     optimizer=[]
 
-    if canc=='none' or canc=='div':
+    if canc_method=='none' or canc_method=='div':
         for const in range(np.size(M)):
             enc.append(Encoder(M[const], modradius[const]))
             dec.append(Decoder(M[const]))
@@ -139,10 +146,10 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
             optimizer.append(optim.Adam(enc[const].parameters(), lr=learn_rate))
             optimizer.append(optim.Adam(dec[const].parameters(), lr=learn_rate))
     
-    elif canc=='nn':
+    elif canc_method=='nn':
         canc = []
         for const in range(np.size(M)):
-            enc.append(Encoder(M[const]))
+            enc.append(Encoder(M[const],modradius[const]))
             dec.append(Decoder(M[const]))
             enc[const].to(device)
             # Adam Optimizer
@@ -152,6 +159,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
                 optimizer.append(optim.Adam(canc[const-1].parameters(),lr=learn_rate))
             optimizer.append(optim.Adam(enc[const].parameters(),lr=learn_rate))
             optimizer.append(optim.Adam(dec[const].parameters(),lr=learn_rate))
+
+#optimizer.add_param_group({"params": h_est})
 
     else:
         raise error("Cancellation method invalid. Choose 'none','nn', or'div'")
@@ -200,11 +209,13 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
                     received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
                 if num==np.size(M)-1:
-                    if canc=='none':
+                    if canc_method=='none':
                         for dnum in range(np.size(M)):
                             decoded.append(dec[dnum](received))
                     
-                    elif canc=='div':
+                    elif canc_method=='div':
+                        for dnum in range(np.size(M)):
+                            decoded.append([])
                         for dnum in range(np.size(M)):
                             if dnum==0:
                                 decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](received))
@@ -213,7 +224,9 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
                                 decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
                                 cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
                     
-                    elif canc=='nn':
+                    elif canc_method=='nn':
+                        for dnum in range(np.size(M)):
+                            decoded.append([])
                         for dnum in range(np.size(M)):
                             if dnum==0:
                                 decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](received)
@@ -266,10 +279,12 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
                 #color map for plot
                 if plotting==True:
                     cvalid= cvalid+M[num]*y_valid[:,num]
-            if num==np.size(M)-1 and canc=='none':
+            if num==np.size(M)-1 and canc_method=='none':
                     for dnum in range(np.size(M)):
                         decoded_valid.append(dec[dnum](channel))
-            if num==np.size(M)-1 and canc=='div':
+            if num==np.size(M)-1 and canc_method=='div':
+                for dnum in range(np.size(M)):
+                    decoded_valid.append([])
                 for dnum in range(np.size(M)):
                     if dnum==0:
                         decoded_valid[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](channel)
@@ -277,20 +292,23 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
                     else:
                         decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
                         cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-            if num==np.size(M)-1 and canc=='nn':
+            if num==np.size(M)-1 and canc_method=='nn':
+                cancelled=[]
+                for dnum in range(np.size(M)):
+                    decoded_valid.append([])
                 for dnum in range(np.size(M)):
                             if dnum==0:
                                 decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](channel))
                                 # canceller
-                                cancelled[epoch].append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
+                                cancelled.append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
                             elif dnum==np.size(M)-1:
-                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[epoch][dnum-1]))
+                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[dnum-1]))
                             else:
-                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[epoch][dnum-1]))
-                                cancelled[epoch].append(canc[dnum](received,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
+                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[dnum-1]))
+                                cancelled.append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
 
         for num in range(len(M)):
-            GMI[epoch] += MI(softmax(decoded_valid[num]), y_valid[:,num])
+            GMI[epoch] += MI(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
             validation_SERs[num][epoch] = SER(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
             print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
             if validation_SERs[num][epoch]>1/M[num] and epoch>5:
@@ -303,13 +321,13 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
         if epoch==0:
             enc_best=enc
             dec_best=dec
-            if canc!='none':
+            if canc_method=='nn':
                 canc_best=canc
             best_epoch=0
         elif GMI[epoch]>GMI[best_epoch]:
             enc_best=enc
             dec_best=dec
-            if canc!='none':
+            if canc_method=='nn':
                 canc_best=canc
             best_epoch=0
 
@@ -330,7 +348,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
                 elif num<np.size(M)-1:
                     helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
                     encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten().repeat(M[num+1])/M[num+1]
-                    encoded = torch.reshape(encoded,(M[num+1],int(encoded.size()/M[num+1])))
+                    encoded = torch.reshape(encoded,(M[num+1],int(len(encoded)/M[num+1])))
                 else:
                     helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
                     encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten()
@@ -345,12 +363,12 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc='none', modrad
             
     print('Training finished')
     if plotting==True:
-        plot_training(validation_SERs, validation_received,cvalid,M, constellations, GMI) #TODO define plot_training
+        plot_training(validation_SERs, validation_received,cvalid,M, constellations, GMI) 
     max_GMI = np.argmax(GMI)
-    if canc=='div' or canc=='nn':
-        return(enc_best,dec_best,canc_best)
+    if canc_method=='nn':
+        return(canc_method,enc_best,dec_best,canc_best, GMI, validation_SERs)
     else:
-        return(enc_best,dec_best)
+        return(canc_method,enc_best,dec_best, GMI, validation_SERs)
 
 def plot_training(SERs,valid_r,cvalid,M, const, GMIs):
     cmap = matplotlib.cm.tab20
@@ -369,30 +387,30 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs):
     #plt.rc('text', usetex=True)
     plt.rcParams.update({
     "text.usetex": True,
-    "font.family": "serif",
+    #"font.family": "serif",
     "font.serif": ["Computer Modern Roman"],
     })
 
     for num in range(np.size(M)):
         plt.plot(SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
-        plt.scatter(min_SER_iter,SERs[num][min_SER_iter],marker='o',c='red')
+        plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',c='red')
         plt.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
     plt.xlabel('epoch no.',fontsize=14)
     plt.ylabel('SER',fontsize=14)
     plt.grid(which='both')
     plt.legend(loc=1)
     plt.title('SER on Validation Dataset',fontsize=16)
-    plt.tight_layout()
+    #plt.tight_layout()
 
     plt.figure("GMIs",figsize=(6,6))
     plt.plot(GMIs,marker='.',linestyle='--')
-    plt.scatter(max_GMI,GMIs[max_GMI],marker='o',c='red')
-    plt.annotate('Max', (0.95*max_GMI,1.4*GMIs[max_GMI]),c='red')
+    plt.plot(max_GMI,GMIs[max_GMI],marker='o',c='red')
+    plt.annotate('Max', (0.95*max_GMI,0.9*GMIs[max_GMI]),c='red')
     plt.xlabel('epoch no.',fontsize=14)
     plt.ylabel('GMI',fontsize=14)
     plt.grid(which='both')
     plt.title('GMI on Validation Dataset',fontsize=16)
-    plt.tight_layout()
+    #plt.tight_layout()
 
     plt.figure("constellation")
     plt.subplot(121)
@@ -422,5 +440,5 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs):
     
     plt.show()
 
-
-#Multipl_NOMA(M=[4,4],sigma_n=[0.1,0.1],train_params=[10,300,0.005],canc='none', modradius=[1,1], plotting=True)
+# ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
+Multipl_NOMA(M=[4,4,4],sigma_n=[0.0001,0.001,0.001],train_params=[20,1000,0.05],canc_method='nn', modradius=[1,1,1], plotting=True)
