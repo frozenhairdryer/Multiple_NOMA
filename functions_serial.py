@@ -12,7 +12,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         # Define Transmitter Layer: Linear function, M input neurons (symbols), 2 output neurons (real and imaginary part)        
         self.fcT1 = nn.Linear(M,2*M) 
-        self.fcT2 = nn.Linear(2*M, 2*M)
+        self.fcT2 = nn.Linear(2*M, 2*M) 
         self.fcT3 = nn.Linear(2*M, 2*M) 
         self.fcT5 = nn.Linear(2*M, 2)
         self.alpha=alph 
@@ -24,41 +24,35 @@ class Encoder(nn.Module):
         # compute output
         out = self.activation_function(self.fcT1(x))
         out = self.activation_function(self.fcT2(out))
-        #out = self.activation_function(self.fcT3(out))
+        out = self.activation_function(self.fcT3(out))
         encoded = self.activation_function(self.fcT5(out))
         # compute normalization factor and normalize channel output
         #norm_factor = torch.mean(torch.abs(torch.view_as_complex(encoded)).flatten()) # normalize mean amplitude to 1
-        norm_factor = torch.max(torch.abs(torch.view_as_complex(encoded)).flatten())
-        if norm_factor>1:        
+        norm_factor = torch.max(torch.abs(torch.view_as_complex(encoded)).flatten())        
         #norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 ) # normalize mean amplitude in real and imag to sqrt(1/2)
-            modulated = encoded / norm_factor
-        else:
-            modulated = encoded
+        modulated = encoded / norm_factor
         if self.alpha!=1:
             modulated = torch.view_as_real((1+self.alpha*torch.view_as_complex(modulated))/(1+self.alpha))
         return modulated
     
 
 class Decoder(nn.Module):
-    def __init__(self,M, alph):
+    def __init__(self,M):
         super(Decoder, self).__init__()
         # Define Receiver Layer: Linear function, 2 input neurons (real and imaginary part), M output neurons (symbols)
         self.fcR1 = nn.Linear(2,2*M) 
-        self.fcR2 = nn.Linear(2*M,2*M) 
+        self.fcR2 = nn.Linear(2*M,2*M)
         self.fcR3 = nn.Linear(2*M,2*M) 
         self.fcR5 = nn.Linear(2*M, M) 
-        self.alpha=torch.tensor([alph,alph])
+
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
 
     def forward(self, x):
         # compute output
-        #n1 = torch.view_as_real((torch.view_as_complex(x)*(1+torch.view_as_complex(self.alpha))-1)/torch.view_as_complex(self.alpha))
-        n1 = (x*(self.alpha+1)-torch.tensor([1,0])).float()
-        out = self.activation_function(self.fcR1(n1))
+        out = self.activation_function(self.fcR1(x))
         out = self.activation_function(self.fcR2(out))
         out = self.activation_function(self.fcR3(out))
-        
         logits = self.activation_function(self.fcR5(out))
         return logits
 
@@ -149,40 +143,26 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     if canc_method=='none' or canc_method=='div':
         for const in range(np.size(M)):
             enc.append(Encoder(M[const], modradius[const]))
-            dec.append(Decoder(M[const], modradius[const]))
+            dec.append(Decoder(M[const]))
             enc[const].to(device)
             # Adam Optimizer
-            #if const==0:
-            #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
-            #    optimizer.add_param_group({'params':dec[const].parameters()})
-            #else:
-            #    optimizer.add_param_group({'params':enc[const].parameters()})
-            #    optimizer.add_param_group({'params':dec[const].parameters()})
-            optimizer.append([])
-            optimizer[const].append(optim.Adam(enc[const].parameters(), lr=learn_rate*0.5))
-            optimizer[const].append(optim.Adam(dec[const].parameters(), lr=learn_rate))
-            
+            #optimizer.append([])
+            optimizer.append(optim.Adam(enc[const].parameters(), lr=learn_rate))
+            optimizer.append(optim.Adam(dec[const].parameters(), lr=learn_rate))
     
     elif canc_method=='nn':
         canc = []
         for const in range(np.size(M)):
             enc.append(Encoder(M[const],modradius[const]))
-            dec.append(Decoder(M[const],modradius[const]))
+            dec.append(Decoder(M[const]))
             enc[const].to(device)
             # Adam Optimizer
             optimizer.append([])
-            #if const==0:
-            #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
-            #    optimizer.add_param_group({'params':dec[const].parameters()})
-            optimizer[const].append(optim.Adam(enc[const].parameters(),lr=learn_rate*0.5))
-            optimizer[const].append(optim.Adam(dec[const].parameters(),lr=learn_rate))
             if const>0:
                 canc.append(Canceller(np.product(M)))
-            #    optimizer.add_param_group({'params':enc[const].parameters()})
-            #    optimizer.add_param_group({'params':canc[const-1].parameters()})
-            #    optimizer.add_param_group({'params':dec[const].parameters()})
                 optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=learn_rate))
-            
+            optimizer[const].append(optim.Adam(enc[const].parameters(),lr=learn_rate))
+            optimizer[const].append(optim.Adam(dec[const].parameters(),lr=learn_rate))
 
 #optimizer.add_param_group({"params": h_est})
 
@@ -211,14 +191,23 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
     print('Start Training')
     GMI = np.zeros(num_epochs)
+    n_step=1
+    sigma=sigma_n
+    sigma_n=[0.3,0.1,0.1]
     for epoch in range(num_epochs):
         batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),np.size(M), device=device)
         
+        if np.mod(epoch,10)==0 and epoch!=0 and n_step<np.size(M):
+            n_step += 1
+            sigma_n=(np.size(M)-n_step+1)*sigma
+            
+            
+            
         for step in range(batches_per_epoch):
             # Generate training data: In most cases, you have a dataset and do not generate a training dataset during training loop
             # sample new mini-batch directory on the GPU (if available)
-            decoded=[]
-            for num in range(np.size(M)):        
+            
+            for num in range(n_step):        
                 batch_labels[:,num].random_(M[num])
                 batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), M[num], device=device)
                 batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,num].long()]=1
@@ -232,68 +221,71 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels_onehot)))))
                     received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
-                if num==np.size(M)-1:
-                    if canc_method=='none':
-                        for dnum in range(np.size(M)):
-                            decoded.append(dec[dnum](received))
+            decoded=[]
+            if canc_method=='none':
+                for dnum in range(n_step):
+                    decoded.append(dec[dnum](received))
                     
-                    elif canc_method=='div':
-                        for dnum in range(np.size(M)):
-                            decoded.append([])
-                        for dnum in range(np.size(M)):
-                            if dnum==0:
-                                decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](received))
-                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
-                            else:
-                                decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
-                    
-                    elif canc_method=='nn':
-                        for dnum in range(np.size(M)):
-                            decoded.append([])
-                        for dnum in range(np.size(M)):
-                            if dnum==0:
-                                decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](received)
-                                cancelled=(canc[dnum](received,enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
-                            elif dnum==np.size(M)-1:
-                                decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](cancelled)
-                            else:
-                                decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](cancelled)
-                                
-                                cancelled=(canc[dnum](received,enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
-            # Calculate Loss
-            for num in range(np.size(M)):
-            #num=np.mod(epoch,np.size(M))
-            # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
+            elif canc_method=='div':
+                for dnum in range(n_step):
+                    decoded.append([])
+                for dnum in range(n_step):
+                    if dnum==0:
+                        decoded[n_step-dnum-1]=(dec[n_step-dnum-1](received))
+                        cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[n_step-dnum-1](softmax(decoded[n_step-dnum-1]))))
+                    else:
+                        decoded[n_step-dnum-1]=(dec[n_step-dnum-1](cancelled))
+                        cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[n_step-dnum-1](softmax(decoded[n_step-dnum-1]))))
+            
+            elif canc_method=='nn':
+                for dnum in range(n_step):
+                    decoded.append([])
+                for dnum in range(n_step):
+                    if dnum==0:
+                        decoded[n_step-dnum-1]=dec[n_step-dnum-1](received)
+                        cancelled=(canc[dnum](received,enc[n_step-dnum-1](softmax(decoded[n_step-dnum-1]))))
+                    elif dnum==n_step-1:
+                        decoded[n_step-dnum-1]=dec[n_step-dnum-1](cancelled)
+                    else:
+                        decoded[n_step-dnum-1]=dec[n_step-dnum-1](cancelled)
+                        cancelled=(canc[dnum](received,enc[n_step-dnum-1](softmax(decoded[n_step-dnum-1]))))
+    # Calculate Loss
+            for num in range(n_step):
+                # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
                 if num==0:
                     loss = weight[0]*loss_fn(decoded[0], batch_labels[:,0].long())
                 else:
                     loss += weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
-                    
+            
+            for num in range(n_step):
+                if epoch==10*(num+1):
+                    for elem in optimizer[num]:
+                        elem.param_groups[0]['lr']=0
+                if epoch==num_epochs-20:
+                    for elem in optimizer[num]:
+                        elem.param_groups[0]['lr']=learn_rate*0.01
+
+                 
+
+            # compute gradients
             loss.backward()
-                # compute gradients
-                #loss.backward()
             
-                # Adapt weights
-            for const in range(np.size(M)):
-                for elem in optimizer[const]:
+            # Adapt weights
+            for num in range(np.size(M)):
+                for elem in optimizer[num]:
                     elem.step()
-            
-                #optimizer.step()
-
-                # reset gradients
-            for const in range(np.size(M)):    
-                for elem in optimizer[const]:
                     elem.zero_grad()
-
-            #optimizer.zero_grad()
+            
+            # reset gradients
+            #for elem in optimizer:
+            #    elem.zero_grad()
 
         # compute validation SER, SNR, GMI
         if plotting==True:
             cvalid = np.zeros(N_valid)
         decoded_valid=[]
         SNR = np.zeros(np.size(M))
-        for num in range(np.size(M)):
+        for num in range(n_step):
             y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
             
             if num==0:
@@ -311,46 +303,44 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 #color map for plot
                 if plotting==True:
                     cvalid= cvalid+M[num]*y_valid[:,num]
-            if num==np.size(M)-1 and canc_method=='none':
-                    for dnum in range(np.size(M)):
+            if num==n_step-1 and canc_method=='none':
+                    for dnum in range(n_step):
                         decoded_valid.append(dec[dnum](channel))
-            if num==np.size(M)-1 and canc_method=='div':
-                for dnum in range(np.size(M)):
+            if num==n_step-1 and canc_method=='div':
+                for dnum in range(n_step):
                     decoded_valid.append([])
-                for dnum in range(np.size(M)):
+                for dnum in range(n_step):
                     if dnum==0:
-                        decoded_valid[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](channel)
-                        cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
+                        decoded_valid[n_step-dnum-1]=dec[n_step-dnum-1](channel)
+                        cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[n_step-dnum-1](softmax(decoded_valid[n_step-dnum-1]))))
                     else:
-                        decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                        cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-            if num==np.size(M)-1 and canc_method=='nn':
+                        decoded_valid[n_step-dnum-1]=(dec[n_step-dnum-1](cancelled))
+                        cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[n_step-dnum-1](softmax(decoded_valid[n_step-dnum-1]))))
+            if num==n_step-1 and canc_method=='nn':
                 cancelled=[]
-                for dnum in range(np.size(M)):
+                for dnum in range(n_step):
                     decoded_valid.append([])
-                for dnum in range(np.size(M)):
+                for dnum in range(n_step):
                             if dnum==0:
-                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](channel))
+                                decoded_valid[n_step-dnum-1]=(dec[n_step-dnum-1](channel))
                                 # canceller
-                                cancelled.append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-                            elif dnum==np.size(M)-1:
-                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[dnum-1]))
+                                cancelled.append(canc[dnum](channel,enc[n_step-dnum-1](softmax(decoded_valid[n_step-dnum-1]))))
+                            elif dnum==n_step-1:
+                                decoded_valid[n_step-dnum-1]=(dec[n_step-dnum-1](cancelled[dnum-1]))
                             else:
-                                decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[dnum-1]))
-                                cancelled.append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
+                                decoded_valid[n_step-dnum-1]=(dec[n_step-dnum-1](cancelled[dnum-1]))
+                                cancelled.append(canc[dnum](channel,enc[n_step-dnum-1](softmax(decoded_valid[n_step-dnum-1]))))
 
-        for num in range(len(M)):
+        for num in range(n_step):
             GMI[epoch] += MI(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
             validation_SERs[num][epoch] = SER(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
             print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
-            if validation_SERs[num][epoch]>2/M[num] and epoch>10:
-                #Weight is increased, when error probability is higher than symbol probability -> misclassification 
-                weight[num] += 1
-            #elif validation_SERs[num][epoch]<0.01:
-            #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
-        weight=weight/np.sum(weight)*np.size(M) # normalize weight sum 
-        print("weight set to "+str(weight))
-        print("Summed MI is: "+ str(GMI[epoch]) + " bit")
+            #if validation_SERs[num][epoch]>1/M[num] and epoch>5:
+            #    #Weight is increased, when error probability is higher than symbol probability -> misclassification 
+            #    weight[num] += 1
+        #weight=weight/np.sum(weight)*np.size(M) # normalize weight sum 
+        #print("weight set to "+str(weight))
+        print("GMI is: "+ str(GMI[epoch]) + " bit")
         print("SNR is: "+ str(SNR)+" dB")
         if epoch==0:
             enc_best=enc
@@ -365,9 +355,9 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 canc_best=canc
             best_epoch=0
 
-        if np.sum(validation_SERs[:,epoch])<0.6:
-            #set weights back if under threshold
-            weight=np.ones(np.size(M))
+        #if np.sum(validation_SERs[:,epoch])<0.2:
+        #    #set weights back if under threshold
+        #    weight=np.ones(np.size(M))
         
         validation_received.append(channel.detach().cpu().numpy())
 
@@ -390,48 +380,33 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             constellations.append(encoded.detach().cpu().numpy())
         
             # store decision region for generating the animation
-            if canc_method=='none':
-                for num in range(np.size(M)):
-                    decision_region_evolution.append([])
-                    mesh_prediction = softmax(dec[num](torch.Tensor(meshgrid).to(device)))
-                    decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
-            elif canc_method=='div':
-                for num in range(np.size(M)):
-                    decision_region_evolution.append([])
-                    if num==0:
-                        mesh_prediction = softmax(dec[np.size(M)-num-1](torch.Tensor(meshgrid).to(device)))
-                        canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[np.size(M)-num-1](mesh_prediction)))
-                    else:
-                        mesh_prediction = softmax(dec[np.size(M)-num-1](canc_grid))
-                        canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[np.size(M)-num-1](mesh_prediction)))
-                    decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
-            else:
-                for num in range(np.size(M)):
-                    decision_region_evolution.append([])
-                    if num==0:
-                        mesh_prediction = softmax(dec[np.size(M)-num-1](torch.Tensor(meshgrid).to(device)))
-                    else:
-                        mesh_prediction = softmax(dec[np.size(M)-num-1](canc[num-1](torch.Tensor(meshgrid).to(device),enc[np.size(M)-num](mesh_prediction))))
-                    decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() +0.4)
-
+            for num in range(np.size(M)):
+                decision_region_evolution.append([])
+                mesh_prediction = softmax(dec[num](torch.Tensor(meshgrid).to(device)))
+                decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
             
     print('Training finished')
     if plotting==True:
-        plot_training(validation_SERs, validation_received,cvalid,M, constellations, GMI, decision_region_evolution, meshgrid, constellation_base) 
+        plot_training(validation_SERs, validation_received,cvalid,M, constellations, GMI) 
     max_GMI = np.argmax(GMI)
     if canc_method=='nn':
         return(canc_method,enc_best,dec_best,canc_best, GMI, validation_SERs)
     else:
         return(canc_method,enc_best,dec_best, GMI, validation_SERs)
 
-def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution, meshgrid, constellation_base):
+def plot_training(SERs,valid_r,cvalid,M, const, GMIs):
     cmap = matplotlib.cm.tab20
     base = plt.cm.get_cmap(cmap)
     color_list = base.colors
     new_color_list = [[t/2 + 0.5 for t in color_list[k]] for k in range(len(color_list))]
 
-    sum_SERs = np.sum(SERs, axis=0)/np.size(M)
-    min_SER_iter = np.argmin(np.sum(SERs,axis=0))
+    #sum_SERs = np.sum(SERs, axis=0)/np.size(M)
+    sum_SERs = SERs[0]
+    for num in range(np.size(M)-1):
+        for snum in range(len(sum_SERs)):
+            if snum>=(num+1)*10:
+                sum_SERs[snum] += SERs[num+1][snum-(num+1)*10]
+    min_SER_iter = np.argmin(sum_SERs)
     max_GMI = np.argmax(GMIs)
     ext_max_plot = 1.05*np.max(np.abs(valid_r[min_SER_iter]))
 
@@ -446,9 +421,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     })
 
     for num in range(np.size(M)):
-        plt.plot(SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
-        plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',c='red')
-        plt.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
+        plt.plot(np.arange(num*10,num*10+len(SERs[num])),SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
+        plt.plot(max_GMI,SERs[num][max_GMI-10*num],marker='o',c='red')
+        plt.annotate('Min', (0.95*(max_GMI),1.4*SERs[num][max_GMI-10*num),c='red')
     plt.xlabel('epoch no.',fontsize=14)
     plt.ylabel('SER',fontsize=14)
     plt.grid(which='both')
@@ -456,18 +431,18 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     plt.title('SER on Validation Dataset',fontsize=16)
     #plt.tight_layout()
 
-    plt.figure("summed MIs",figsize=(6,6))
+    plt.figure("GMIs",figsize=(6,6))
     plt.plot(GMIs,marker='.',linestyle='--')
     plt.plot(max_GMI,GMIs[max_GMI],marker='o',c='red')
     plt.annotate('Max', (0.95*max_GMI,0.9*GMIs[max_GMI]),c='red')
     plt.xlabel('epoch no.',fontsize=14)
-    plt.ylabel('summed MI',fontsize=14)
+    plt.ylabel('GMI',fontsize=14)
     plt.grid(which='both')
-    plt.title('summed MI on Validation Dataset',fontsize=16)
+    plt.title('GMI on Validation Dataset',fontsize=16)
     #plt.tight_layout()
 
     plt.figure("constellation")
-    #plt.subplot(121)
+    plt.subplot(121)
     plt.scatter(np.real(const[min_SER_iter].flatten()),np.imag(const[min_SER_iter].flatten()),c=range(np.product(M)), cmap='tab20',s=50)
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$',fontsize=14)
@@ -477,55 +452,22 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     plt.grid(which='both')
     plt.title('Constellation',fontsize=16)
 
-    val_cmplx=valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]
+    val_cmplx=valid_r[max_GMI][:,0]+1j*valid_r[max_GMI][:,1]
 
-    plt.figure("Received signal")
-    #plt.subplot(122)
-    plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
+
+    plt.subplot(122)
+    plt.scatter(np.real(val_cmplx), np.imag(val_cmplx), c=cvalid, cmap='tab20',s=4)
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$',fontsize=14)
     plt.ylabel(r'$\Im\{r\}$',fontsize=14)
     plt.xlim((-2,2))
     plt.ylim((-2,2))
-    plt.grid()
     plt.title('Received',fontsize=16)
     print('Minimum mean SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(SERs[0])))
-    print('Maximum obtained summed MI: %1.5f (epoch %d out of %d)' % (GMIs[max_GMI],max_GMI,len(GMIs)))
+    print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (GMIs[max_GMI],max_GMI,len(GMIs)))
     print('The corresponding constellation symbols are:\n', const[min_SER_iter])
-    plt.tight_layout()
     
-    plt.figure("Decision regions", figsize=(19,6))
-    for num in range(np.size(M)):
-        plt.subplot(1,np.size(M),num+1)
-        decision_scatter = np.argmax(decision_region_evolution[num][min_SER_iter], 1)
-        if num==0:
-            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:M[num]]))
-        else:
-            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[M[num-1]:M[num-1]+M[num]]))
-        #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
-        plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
-        plt.axis('scaled')
-        #plt.xlim((-ext_max_plot,ext_max_plot))
-        #plt.ylim((-ext_max_plot,ext_max_plot))
-        plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-        plt.ylabel(r'$\Im\{r\}$',fontsize=14)
-        plt.title('Decision regions for Decoder %d' % num,fontsize=16)
-
-    plt.figure("Base Constellations")
-    for num in range(np.size(M)):
-        plt.subplot(1,np.size(M),num+1)
-        plt.scatter(np.real(constellation_base[num][min_SER_iter].detach().numpy()),np.imag(constellation_base[num][min_SER_iter].detach().numpy()), c=np.arange(M[num]))
-        plt.xlim((-ext_max_plot,ext_max_plot))
-        plt.ylim((-ext_max_plot,ext_max_plot))
-        plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-        plt.ylabel(r'$\Im\{r\}$',fontsize=14)
-        plt.grid()
-        plt.tight_layout()
-
-
-
     plt.show()
 
 # ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
-Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.03],train_params=[150,2000,0.0001],canc_method='nn', modradius=[1,1/3*np.sqrt(2),np.sqrt(2)*1/9], plotting=True)
-#Multipl_NOMA(M=[4,4],sigma_n=[0.09,0.08],train_params=[50,300,0.006],canc_method='nn', modradius=[1,1/3*np.sqrt(2)], plotting=True)
+Multipl_NOMA(M=[4,4,4],sigma_n=[0.05,0.05,0.05],train_params=[80,1000,0.001],canc_method='nn', modradius=[1,1/3*np.sqrt(2),np.sqrt(2)*1/9], plotting=True)

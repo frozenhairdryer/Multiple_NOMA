@@ -185,7 +185,7 @@ plt.legend(loc=3)
 plt.ylabel('GMI')
 plt.grid()
 plt.tight_layout()
-plt.savefig('cancell_compare_GMI2x.png')
+plt.savefig('cancell_compare_GMI_largenet.png')
 
 plt.figure(figsize=(10,6))
 
@@ -269,7 +269,7 @@ plt.yscale('log')
 plt.ylabel('SERs')
 plt.grid()
 plt.tight_layout()
-plt.savefig('cancell_compare_SER2x.png')
+plt.savefig('cancell_compare_SER_largenet.png')
 
 plt.show()
 
