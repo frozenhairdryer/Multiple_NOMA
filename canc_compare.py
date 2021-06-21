@@ -2,16 +2,17 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 plt.show(block=False)
-from functions import *
+from functions_serialform import *
 import pickle
 
 
 ### parameters
-runs = 50
-num_epochs=55
+runs = 30
+num_epochs=50
 
-sigma_n=[0.05,0.05]
+sigma_n=[0.08,0.08]
 M=[4,4]
+#alph=[1,1/3*np.sqrt(2)]
 alph=[1,1]
 
 params=[runs,num_epochs,sigma_n,M,alph]
@@ -20,7 +21,7 @@ params=[runs,num_epochs,sigma_n,M,alph]
 GMI_nocanc=[]
 list_nocanc=[]
 #compare_data.append([])
-for item in range(runs):
+""" for item in range(1):
     _,en, dec, gmi, ser =Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='none', modradius=alph, plotting=False)
     GMI_nocanc.append(gmi)
     list_nocanc.append(ser)
@@ -29,7 +30,7 @@ for item in range(runs):
         best_achieved='none'
     elif max(gmi)>max(best_impl[0]):
         best_impl=[gmi,en, dec, ser]
-        best_achieved='none'
+        best_achieved='none' """
     #exec(open("nn_enc_dec.py").read())
     #list_nocanc.append(validation_SERs)
     #compare_data[0].append(dir())
@@ -40,11 +41,10 @@ for item in range(runs):
 GMI_divcanc=[]
 list_divcanc=[]
 #compare_data.append([])
-for item in range(runs):
+""" for item in range(runs):
     try:
         #exec(open("nn_enc_dec_divcanc.py").read())
-        
-        _,en, dec, gmi, ser = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='div', modradius=alph, plotting=False)
+        _,en, dec, gmi, ser = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.001],canc_method='div', modradius=alph, plotting=False)
         list_divcanc.append(ser)
         GMI_divcanc.append(gmi)
         if max(gmi)>max(best_impl[0]):
@@ -52,7 +52,7 @@ for item in range(runs):
             best_achieved='div'
     except:
         print("Diverges!")
-        GMI_divcanc.append(np.zeros((runs)))
+        GMI_divcanc.append(np.ones((num_epochs))) """
     #compare_data[1].append(dir())
     #plt.close('all')
 
@@ -63,18 +63,21 @@ list_nncanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.008],canc_method='nn', modradius=alph, plotting=False)
+    _,en, dec,canc, gmi, ser = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph, plotting=False)
     GMI_nncanc.append(gmi)
     list_nncanc.append(ser)
-    if max(gmi)>max(best_impl[0]):
+    if item==0:
+        best_impl=[gmi,en, dec, canc, ser]
+        best_achieved='nn'
+    elif max(gmi)>max(best_impl[0]):
         best_impl=[gmi,en, dec, canc, ser]
         best_achieved='nn'
 
 ## save all data if further processing is wanted
-with open('best_impl2.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-    pickle.dump([best_impl, best_achieved, params], f)
-#with open('cancel_compare_lists_noweigth2.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-#    pickle.dump([list_nocanc,list_divcanc,list_nncanc], f)
+#with open('best_impl_compplot.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+#    pickle.dump([best_impl, best_achieved, params], f)
+with open('cancel_compare_nn_compplot.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+    pickle.dump([list_nocanc,list_divcanc,list_nncanc, best_impl, best_achieved, params], f)
 print("Best implementation achieved with "+best_achieved+" cancellation.")
 
 ## figures
@@ -85,7 +88,7 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure(figsize=(10,6))
+""" plt.figure("No Cancellation", figsize=(3.5,2))
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -97,9 +100,8 @@ for item in range(runs):
     #plt.plot(list_nncanc[item][0],c=color_list[9], alpha=0.9)
     #plt.plot(list_nncanc[item][1],c=color_list[11], alpha=0.9)
 
-    plt.plot(GMI_nocanc[item],c=color_list[1], alpha=0.9)
-    plt.plot(GMI_divcanc[item],c=color_list[3], alpha=0.9)
-    plt.plot(GMI_nncanc[item],c=color_list[5], alpha=0.9)
+    plt.plot(GMI_nocanc[item],c=color_list[1],linewidth=0.5, alpha=0.9) """
+
 
 
 for item in range(runs):
@@ -110,8 +112,8 @@ for item in range(runs):
         # average_dcanc1=1/runs*list_divcanc[item][:][1]
         # average_nncanc0=1/runs*list_nncanc[item][:][0]
         # average_nncanc1=1/runs*list_nncanc[item][:][1]
-        average_nocanc = 1/runs*GMI_nocanc[item]
-        average_divcanc = 1/runs*GMI_divcanc[item]
+        """ average_nocanc = 1/runs*GMI_nocanc[item]
+        average_divcanc = 1/runs*GMI_divcanc[item] """
         average_nncanc = 1/runs*GMI_nncanc[item]
     else:
         # average_nocanc0+=1/runs*list_nocanc[item][:][0]
@@ -120,8 +122,8 @@ for item in range(runs):
         # average_dcanc1+=1/runs*list_divcanc[item][:][1]
         # average_nncanc0+=1/runs*list_nncanc[item][:][0]
         # average_nncanc1+=1/runs*list_nncanc[item][:][1] 
-        average_nocanc += 1/runs*GMI_nocanc[item]
-        average_divcanc += 1/runs*GMI_divcanc[item]
+        """ average_nocanc += 1/runs*GMI_nocanc[item]
+        average_divcanc += 1/runs*GMI_divcanc[item] """
         average_nncanc += 1/runs*GMI_nncanc[item]
     
 #average_nocanc = np.mean(GMI_nocanc, axis=1)
@@ -144,8 +146,8 @@ for item in range(runs):
         # var_dcanc1=(list_divcanc[item][:][1]-average_dcanc1)**2/runs
         # var_nncanc0=(list_nncanc[item][:][0]-average_nocanc0)**2/runs
         # var_nncanc1=(list_nncanc[item][:][1]-average_nocanc1)**2/runs
-        var_nocanc=(GMI_nocanc[item]-average_nocanc)**2/runs
-        var_divcanc=(GMI_divcanc[item]-average_divcanc)**2/runs
+        """ var_nocanc=(GMI_nocanc[item]-average_nocanc)**2/runs
+        var_divcanc=(GMI_divcanc[item]-average_divcanc)**2/runs """
         var_nncanc=(GMI_nncanc[item]-average_nncanc)**2/runs
     else:
         # var_nocanc0+=(list_nocanc[item][:][0]-average_nocanc0)**2/runs
@@ -154,40 +156,65 @@ for item in range(runs):
         # var_dcanc1+=(list_divcanc[item][:][1]-average_dcanc1)**2/runs
         # var_nncanc0+=(list_nncanc[item][:][0]-average_nocanc0)**2/runs
         # var_nncanc1+=(list_nncanc[item][:][1]-average_nocanc1)**2/runs
-        var_nocanc+=(GMI_nocanc[item]-average_nocanc)**2/runs
-        var_divcanc+=(GMI_divcanc[item]-average_divcanc)**2/runs
+        """ var_nocanc+=(GMI_nocanc[item]-average_nocanc)**2/runs
+        var_divcanc+=(GMI_divcanc[item]-average_divcanc)**2/runs """
         var_nncanc+=(GMI_nncanc[item]-average_nncanc)**2/runs 
 
 
 
-plt.plot(average_nocanc, c=color_list[0],linewidth=3, label="no cancellation")
+""" plt.plot(average_nocanc, c=color_list[0],linewidth=2, label="no cancellation")
 #plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
-
 plt.fill_between(np.arange(num_epochs), average_nocanc+var_nocanc,average_nocanc-var_nocanc, color=color_list[0], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nocanc1+var_nocanc1,average_nocanc1-var_nocanc1, color=color_list[2], alpha=0.2)
 
-plt.plot(average_divcanc, c=color_list[2], linewidth=3, label="division cancellation")
+#plt.title("Training GMIs without cancellation")
+plt.legend(loc=3)
+#plt.yscale('log')
+plt.ylabel('GMI')
+plt.grid()
+plt.ylim(0,4)
+plt.tight_layout()
+plt.savefig('cancell_compare_GMI_Nocanc_modradius.png')
+
+
+plt.figure("Division Cancellation", figsize=(3.5,2))
+for item in range(runs):
+    plt.plot(GMI_divcanc[item],c=color_list[3],linewidth=0.5 ,alpha=0.9)
+
+plt.plot(average_divcanc, c=color_list[2], linewidth=2, label="division cancellation")
 #plt.plot(average_dcanc1, c=color_list[6], linewidth=3, label="Enc"+str(1)+" division cancellation")
 
 plt.fill_between(np.arange(num_epochs), average_divcanc+var_divcanc,average_divcanc-var_divcanc, color=color_list[2], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_dcanc1+var_dcanc1,average_dcanc1-var_dcanc1, color=color_list[6], alpha=0.2)
 
+#plt.title("Training GMIs for Division cancellation")
+plt.legend(loc=3)
+#plt.yscale('log')
+plt.ylabel('GMI')
+plt.ylim(0,4)
+plt.grid()
+plt.tight_layout()
+plt.savefig('cancell_compare_GMI_Divcanc_modradius.png')
+ """
 
-plt.plot(average_nncanc, c=color_list[4],linewidth=3, label="NN cancellation")
+plt.figure("NN Cancellation", figsize=(3.5,2))
+for item in range(runs):
+    plt.plot(GMI_nncanc[item],c=color_list[5],linewidth=0.5 ,alpha=0.9)
+plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")
 #plt.plot(average_nncanc1, c=color_list[10],linewidth=3, label="Enc"+str(1)+" NN cancellation")
-
 plt.fill_between(np.arange(num_epochs), average_nncanc+var_nncanc,average_nncanc-var_nncanc, color=color_list[4], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nncanc1+var_nncanc1,average_nncanc1-var_nncanc1, color=color_list[10], alpha=0.2)
 
-plt.title("Training GMIs for different cancellation approaches")
+#plt.title("Training GMIs for NN cancellation")
 plt.legend(loc=3)
 #plt.yscale('log')
 plt.ylabel('GMI')
 plt.grid()
+plt.ylim(0,4)
 plt.tight_layout()
-plt.savefig('cancell_compare_GMI_largenet.png')
+plt.savefig('cancell_compare_GMI_NNcanc_modradius.png')
 
-plt.figure(figsize=(10,6))
+""" plt.figure(figsize=(10,6))
 
 for item in range(runs):
     plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -269,7 +296,7 @@ plt.yscale('log')
 plt.ylabel('SERs')
 plt.grid()
 plt.tight_layout()
-plt.savefig('cancell_compare_SER_largenet.png')
+plt.savefig('cancell_compare_SER_largenet_modradius.png') """
 
 plt.show()
 
