@@ -94,38 +94,38 @@ def SER(predictions, labels):
     s2=np.argmax(predictions, 1)
     return (np.sum(s2 != labels) / predictions.shape[0])
 
-def MI(predictions, labels):
-    px=torch.bincount(torch.tensor(labels))/np.size(labels)
-    py=np.sum(predictions, axis=0)/np.size(labels)
-    py_x = torch.zeros((len(px),len(px)))
-    countx = torch.zeros(len(px))
-    #print(s_hat)
-    for elem in range(len(labels)):
-        #py_x[labels[elem],np.argmax(predictions[elem])] += 1/len(labels)
-        py_x[labels[elem], argmax(predictions[elem])] += 1
-        countx[labels[elem]] +=1
-    py_x=py_x/countx
+def BER(predictions, labels,m):
+    # Bit representation of symbols
+    binaries = torch.from_numpy(np.reshape(np.unpackbits(np.uint8(np.arange(0,m))), (-1,8))).float()
+    binaries = binaries[:,int(8-np.log2(m)):]
+    y_valid_binary = binaries[labels,:].detach().cpu().numpy()
+    pred_binary = binaries[np.argmax(predictions,1),:].detach().cpu().numpy()
+    ber=torch.zeros(int(np.log2(m)))
+    for bit in range(int(np.log2(m))):
+        ber[bit] = np.mean(1-np.isclose((pred_binary[:,bit] > 0.5).astype(float), y_valid_binary[:,bit]))
+        if ber[bit]>0.5:
+            ber[bit]=1-ber[bit]
+    return ber, y_valid_binary,pred_binary
 
-    info=torch.zeros((len(px),len(px)))
-    #print(info)
-    for elemx in range(len(px)):
-        for elemy in range(len(px)):
-            info[elemx,elemy]=py_x[elemx,elemy]*px[elemx]*torch.log2(py_x[elemx,elemy]/(py[elemy])+1e-12)
-            #if info[elemx,elemy].isnan():
-            #    info[elemx,elemy]=0
-    #print(info)
-    infos=sum(sum(info))
-    return infos
 
-def GMI(SERs, M, predictions=None, labels=None):
-    # labels are decimal representation of 
+def GMI(SERs, M, ber=None):
+    # gmi estimate or calculation, if bers are given
     M_all=np.product(M)
-    gmi=0
+    gmi_est=0
     for mod in range(np.size(M)):
-        Pe = SERs[mod]/np.log2(M[mod])
+        #Pe = SERs[mod]/np.log2(M[mod])
         #Pe = 1-(1-SERs[mod])**(1/np.log2(M[mod]))
-        gmi+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
-    return gmi
+        #gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
+        Pe = SERs[mod] # only one bit contributes to errors
+        gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
+    if ber!=None:
+        gmi=[]
+        for num in range(len(M)):
+            for x in range(int(np.log2(M[num]))):
+                gmi.append((1+(ber[num][x]*np.log2(ber[num][x]+1e-12)+(1-ber[num][x])*np.log2((1-ber[num][x])+1e-12))).detach().numpy())    
+        return gmi_est, np.array(gmi)
+    else:
+        return gmi_est
 
 def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
     # train_params=[num_epochs,batches_per_epoch, learn_rate]
@@ -146,14 +146,15 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     N_valid=10000
     weight=np.ones(len(M))
 
+
     # Generate Validation Data
     rng = np.random.default_rng()
     y_valid = rng.integers(0,M,size=(N_valid,np.size(M)))
 
     if plotting==True:
         # meshgrid for plotting
-        ext_max = 2  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
-        mgx,mgy = np.meshgrid(np.linspace(-ext_max,ext_max,400), np.linspace(-ext_max,ext_max,400))
+        ext_max = 1.5  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
+        mgx,mgy = np.meshgrid(np.linspace(-ext_max,ext_max,70), np.linspace(-ext_max,ext_max,70))
         meshgrid = np.column_stack((np.reshape(mgx,(-1,1)),np.reshape(mgy,(-1,1))))
     
     if encoder==None:
@@ -265,8 +266,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     # Vary batch size during training
     batch_size_per_epoch = np.linspace(100,10000,num=num_epochs)
 
+    validation_BER = []
     validation_SERs = np.zeros((np.size(M),num_epochs))
-    validation_GMI = np.zeros((np.size(M),num_epochs))
     validation_received = []
     if plotting==True:
         decision_region_evolution = []
@@ -278,11 +279,12 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             constellation_base.append([])
 
     print('Start Training')
-    summed_MI = np.zeros(num_epochs)
+    bitnumber = int(np.sum(np.log2(M)))
     gmi = np.zeros(num_epochs)
+    gmi_exact = np.zeros((num_epochs, bitnumber))
     for epoch in range(num_epochs):
         batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),np.size(M), device=device)
-        
+        validation_BER.append([])
         for step in range(batches_per_epoch):
             # Generate training data: In most cases, you have a dataset and do not generate a training dataset during training loop
             # sample new mini-batch directory on the GPU (if available)
@@ -409,19 +411,20 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
 
         for num in range(len(M)):
-            summed_MI[epoch] += MI(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
+            validation_BER[epoch].append(BER(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num],M[num])[0])
             validation_SERs[num][epoch] = SER(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
-            #print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))                
+            print('Validation BER after epoch %d for encoder %d: ' % (epoch,num) + str(validation_BER[epoch][num].data.tolist()) +' (loss %1.8f)' % (loss.detach().cpu().numpy()))  
+            print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))              
             if validation_SERs[num][epoch]>0.5 and epoch>10:
                 #Weight is increased, when error probability is higher than symbol probability -> misclassification 
                 weight[num] += 1
             #elif validation_SERs[num][epoch]<0.01:
             #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
         weight=weight/np.sum(weight)*np.size(M) # normalize weight sum
-        gmi[epoch]=GMI(validation_SERs[:,epoch],M)
+        gmi[epoch],gmi_exact[epoch]=GMI(validation_SERs[:,epoch],M,validation_BER[epoch])
         #print("weight set to "+str(weight))
         print("GMI is: "+ str(gmi[epoch]) + " bit")
-        #print("Summed MI is: "+ str(summed_MI[epoch]) + " bit")
+        #print("BER is: "+ str(summed_MI[epoch]) + " bit")
         print("SNR is: "+ str(SNR)+" dB")
         if epoch==0:
             enc_best=enc
@@ -429,7 +432,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             if canc_method=='nn':
                 canc_best=canc
             best_epoch=0
-        elif summed_MI[epoch]>summed_MI[best_epoch]:
+        elif gmi[epoch]>gmi[best_epoch]:
             enc_best=enc
             dec_best=dec
             if canc_method=='nn':
@@ -495,14 +498,14 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             
     print('Training finished')
     if plotting==True:
-        plot_training(validation_SERs, validation_received,cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base) 
+        plot_training(validation_SERs, validation_received,cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact) 
     max_GMI = np.argmax(gmi)
     if canc_method=='nn':
-        return(canc_method,enc_best,dec_best,canc_best, gmi, validation_SERs)
+        return(canc_method,enc_best,dec_best,canc_best, gmi, validation_SERs,gmi_exact)
     else:
-        return(canc_method,enc_best,dec_best, gmi, validation_SERs)
+        return(canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact)
 
-def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution, meshgrid, constellation_base):
+def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution, meshgrid, constellation_base, gmi_exact):
     cmap = matplotlib.cm.tab20
     base = plt.cm.get_cmap(cmap)
     color_list = base.colors
@@ -513,8 +516,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     max_GMI = np.argmax(GMIs)
     ext_max_plot = 1.2*np.max(np.abs(valid_r[min_SER_iter]))
 
-    plt.figure("SERs",figsize=(6,6))
-    font = {'size'   : 14}
+    plt.figure("SERs",figsize=(3,3))
+    font = {#'family': 'serif', 
+    'size'   : 10}
     plt.rc('font', **font)
     #plt.rc('text', usetex=True)
     plt.rcParams.update({
@@ -527,67 +531,81 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
         plt.plot(SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
         plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',c='red')
         plt.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
-    plt.xlabel('epoch no.',fontsize=14)
-    plt.ylabel('SER',fontsize=14)
+    plt.xlabel('epoch no.')
+    plt.ylabel('SER')
     plt.grid(which='both')
     plt.legend(loc=1)
-    plt.title('SER on Validation Dataset',fontsize=16)
+    plt.title('SER on Validation Dataset')
     #plt.tight_layout()
 
-    plt.figure("GMIs",figsize=(6,6))
-    plt.plot(GMIs,marker='.',linestyle='--')
-    plt.plot(max_GMI,GMIs[max_GMI],marker='o',c='red')
-    plt.annotate('Max', (0.95*max_GMI,0.9*GMIs[max_GMI]),c='red')
-    plt.xlabel('epoch no.',fontsize=14)
-    plt.ylabel('summed MI',fontsize=14)
+    plt.figure("GMIs",figsize=(3,2.5))
+    #plt.plot(GMIs,marker='.',linestyle='--',label='Appr.')
+    
+    for num in range(np.size(gmi_exact[0,:])):
+        if num==0:
+            t=gmi_exact[:,num]
+            plt.fill_between(np.arange(len(t)),t, alpha=0.4)
+        else:
+            plt.fill_between(np.arange(len(t)),t,t+gmi_exact[:,num],alpha=0.4)
+            t+=gmi_exact[:,num]
+    plt.plot(t, label='GMI')
+    #plt.plot(max_GMI,GMIs[max_GMI],c='red')
+    plt.plot(argmax(t),max(t),marker='o',c='red')
+    plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
+    plt.xlabel('epoch no.')
+    plt.ylabel('GMI')
+    #plt.legend(loc=3)
     plt.grid(which='both')
-    plt.title('GMI on Validation Dataset',fontsize=16)
-    #plt.tight_layout()
+    plt.title('GMI on Validation Dataset')
+    plt.tight_layout()
 
     plt.figure("constellation")
     #plt.subplot(121)
     plt.scatter(np.real(const[min_SER_iter].flatten()),np.imag(const[min_SER_iter].flatten()),c=range(np.product(M)), cmap='tab20',s=50)
     plt.axis('scaled')
-    plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-    plt.ylabel(r'$\Im\{r\}$',fontsize=14)
+    plt.xlabel(r'$\Re\{r\}$')
+    plt.ylabel(r'$\Im\{r\}$')
     plt.xlim((-2,2))
     plt.ylim((-2,2))
     plt.grid(which='both')
-    plt.title('Constellation',fontsize=16)
+    plt.title('Constellation')
 
     val_cmplx=valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]
 
-    plt.figure("Received signal")
+    plt.figure("Received signal",figsize=(2.7,2.7))
     #plt.subplot(122)
-    plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
+    plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000], cmap='tab20',s=2)
     plt.axis('scaled')
-    plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-    plt.ylabel(r'$\Im\{r\}$',fontsize=14)
+    plt.xlabel(r'$\Re\{r\}$')
+    plt.ylabel(r'$\Im\{r\}$')
     plt.xlim((-2,2))
     plt.ylim((-2,2))
     plt.grid()
-    plt.title('Received',fontsize=16)
+    plt.title('Received')
+    plt.tight_layout()
+
     print('Minimum mean SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(SERs[0])))
     print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (GMIs[max_GMI],max_GMI,len(GMIs)))
     print('The corresponding constellation symbols are:\n', const[min_SER_iter])
-    plt.tight_layout()
     
-    plt.figure("Decision regions", figsize=(19,6))
+    
+    plt.figure("Decision regions", figsize=(5,3))
     for num in range(np.size(M)):
         plt.subplot(1,np.size(M),num+1)
         decision_scatter = np.argmax(decision_region_evolution[num][min_SER_iter], 1)
         if num==0:
-            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:M[num]]))
+            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:M[num]]))
         else:
-            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=4,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[M[num-1]:M[num-1]+M[num]]))
+            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[M[num-1]:M[num-1]+M[num]]))
         #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
-        plt.scatter(np.real(val_cmplx[0:4000]), np.imag(val_cmplx[0:4000]), c=cvalid[0:4000], cmap='tab20',s=4)
+        plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000], cmap='tab20',s=2)
         plt.axis('scaled')
         #plt.xlim((-ext_max_plot,ext_max_plot))
         #plt.ylim((-ext_max_plot,ext_max_plot))
-        plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-        plt.ylabel(r'$\Im\{r\}$',fontsize=14)
-        plt.title('Decision regions for Decoder %d' % num,fontsize=16)
+        plt.xlabel(r'$\Re\{r\}$')
+        plt.ylabel(r'$\Im\{r\}$')
+        plt.title('Decoder %d' % num)
+        plt.tight_layout()
 
     plt.figure("Base Constellations")
     for num in range(np.size(M)):
@@ -595,8 +613,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
         plt.scatter(np.real(constellation_base[num][min_SER_iter].detach().numpy()),np.imag(constellation_base[num][min_SER_iter].detach().numpy()), c=np.arange(M[num]))
         plt.xlim((-ext_max_plot,ext_max_plot))
         plt.ylim((-ext_max_plot,ext_max_plot))
-        plt.xlabel(r'$\Re\{r\}$',fontsize=14)
-        plt.ylabel(r'$\Im\{r\}$',fontsize=14)
+        plt.xlabel(r'$\Re\{r\}$')
+        plt.ylabel(r'$\Im\{r\}$')
         plt.grid()
         plt.tight_layout()
 
@@ -606,42 +624,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
 
 # ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
 #canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
-#Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.02],train_params=[300,1000,0.004],canc_method='none', modradius=[1,1.5/3*np.sqrt(2),np.sqrt(2)*1.5/9], plotting=True, encoder=enc_best)
+Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=True)
 
 #canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
 #_,en, dec, gmi, ser = Multipl_NOMA([4,4],[0.08,0.08],train_params=[50,300,0.001],canc_method='div', modradius=[1,1], plotting=True)
 #Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.02],train_params=[150,1000,0.0008],canc_method='none', modradius=[1,1.5/3*np.sqrt(2),np.sqrt(2)*1.5/9], plotting=True, encoder=enc_best)
 
-learnrate=[0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01]
-#learnrate=[0.0001,0.0003,0.0006]
-runs=10
-sum_sers=np.ones([len(learnrate),runs])
-gmi =np.zeros([len(learnrate),runs])
-for lr in range(len(learnrate)):
-    for num in range(runs):
-        canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[50,300,learnrate[lr]],canc_method='div', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
-        sum_SERs = np.sum(validation_SERs, axis=0)/2
-        min_SER_iter = np.argmin(np.sum(validation_SERs,axis=0))
-        #max_GMI = np.argmax(smi)
-        sum_sers[lr,num]=sum_SERs[min_SER_iter]
-        gmi[lr,num]=max(smi)
-
-plt.figure("GMI sweep",figsize=(3,2.5))
-for num in range(runs):
-    plt.scatter(learnrate,gmi[:,num], c='blue',alpha=0.5)
-plt.scatter(learnrate,np.max(gmi, axis=1))
-plt.xlabel('learn rate')
-plt.ylabel("GMI")
-plt.grid()
-plt.tight_layout()
-
-plt.figure("SER sweep",figsize=(3,2.5))
-for num in range(runs):
-    plt.scatter(learnrate,sum_sers[:,num],c='blue',alpha=0.5)
-plt.scatter(learnrate,np.max(sum_sers, axis=1))
-plt.xlabel('learn rate')
-plt.ylabel("summed SER")
-plt.grid()
-plt.tight_layout()
-
-plt.show()
