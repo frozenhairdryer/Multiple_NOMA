@@ -6,6 +6,7 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+import datetime
 
 class Encoder(nn.Module):
     def __init__(self,M, mradius):
@@ -113,11 +114,11 @@ def GMI(SERs, M, ber=None):
     M_all=np.product(M)
     gmi_est=0
     for mod in range(np.size(M)):
-        #Pe = SERs[mod]/np.log2(M[mod])
+        Pe = 1/(1-SERs[mod])*SERs[mod]/np.log2(M[mod])
         #Pe = 1-(1-SERs[mod])**(1/np.log2(M[mod]))
         #gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
-        Pe = SERs[mod] # only one bit contributes to errors
-        gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
+        #Pe = SERs[mod] # only one bit contributes to errors
+        gmi_est+= np.log2(M[mod])+np.log2(M[mod])*(Pe*np.log2(Pe+1e-12)+(1-Pe)*np.log2((1-Pe)+1e-12))
     if ber!=None:
         gmi=[]
         for num in range(len(M)):
@@ -539,8 +540,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     #plt.tight_layout()
 
     plt.figure("GMIs",figsize=(3,2.5))
-    #plt.plot(GMIs,marker='.',linestyle='--',label='Appr.')
-    
+    plt.plot(GMIs,marker='.',linestyle='--',label='Appr.')
+    #plt.plot(max_GMI,GMIs[max_GMI],c='red')
     for num in range(np.size(gmi_exact[0,:])):
         if num==0:
             t=gmi_exact[:,num]
@@ -549,7 +550,6 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
             plt.fill_between(np.arange(len(t)),t,t+gmi_exact[:,num],alpha=0.4)
             t+=gmi_exact[:,num]
     plt.plot(t, label='GMI')
-    #plt.plot(max_GMI,GMIs[max_GMI],c='red')
     plt.plot(argmax(t),max(t),marker='o',c='red')
     plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
     plt.xlabel('epoch no.')
@@ -618,14 +618,13 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
         plt.grid()
         plt.tight_layout()
 
-
-
     plt.show()
 
 # ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
 #canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
+begin_time = datetime.datetime.now()
 Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=True)
-
+print(datetime.datetime.now() - begin_time)
 #canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
 #_,en, dec, gmi, ser = Multipl_NOMA([4,4],[0.08,0.08],train_params=[50,300,0.001],canc_method='div', modradius=[1,1], plotting=True)
 #Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.02],train_params=[150,1000,0.0008],canc_method='none', modradius=[1,1.5/3*np.sqrt(2),np.sqrt(2)*1.5/9], plotting=True, encoder=enc_best)
