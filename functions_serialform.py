@@ -19,6 +19,17 @@ matplotlib.rcParams.update({
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.autograd.set_detect_anomaly(True)
 
+matplotlib.use("pgf")
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+})
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+torch.autograd.set_detect_anomaly(True)
+
 class Encoder(nn.Module):
     def __init__(self,M, mradius):
         super(Encoder, self).__init__()
@@ -55,10 +66,10 @@ class Decoder(nn.Module):
     def __init__(self,M):
         super(Decoder, self).__init__()
         # Define Receiver Layer: Linear function, 2 input neurons (real and imaginary part), M output neurons (symbols)
-        self.fcR1 = nn.Linear(2,2*M) 
-        self.fcR2 = nn.Linear(2*M,2*M) 
-        self.fcR3 = nn.Linear(2*M,2*M) 
-        self.fcR5 = nn.Linear(2*M, M) 
+        self.fcR1 = nn.Linear(2,2*M,device=device) 
+        self.fcR2 = nn.Linear(2*M,2*M,device=device) 
+        self.fcR3 = nn.Linear(2*M,2*M,device=device) 
+        self.fcR5 = nn.Linear(2*M, M,device=device) 
         #self.alpha=torch.tensor([alph,alph])
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -77,11 +88,11 @@ class Decoder(nn.Module):
 class Canceller(nn.Module):
     def __init__(self,Mod):
         super(Canceller, self).__init__()
-        self.fcR1 = nn.Linear(2,Mod) 
-        self.fcR2 = nn.Linear(2,Mod) 
-        self.fcR3 = nn.Linear(Mod,Mod) 
-        self.fcR4 = nn.Linear(Mod,Mod) 
-        self.fcR5 = nn.Linear(Mod, 2) 
+        self.fcR1 = nn.Linear(2,Mod,device=device) 
+        self.fcR2 = nn.Linear(2,Mod,device=device) 
+        self.fcR3 = nn.Linear(Mod,Mod,device=device) 
+        self.fcR4 = nn.Linear(Mod,Mod,device=device) 
+        self.fcR5 = nn.Linear(Mod, 2,device=device) 
 
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -114,7 +125,11 @@ def BER(predictions, labels,m):
     pred_binary = binaries[np.argmax(predictions,1),:].detach().cpu().numpy()
     ber=torch.zeros(int(np.log2(m)))
     for bit in range(int(np.log2(m))):
+<<<<<<< HEAD
         ber[bit] = np.mean(1-np.isclose((pred_binary[:,bit] > 0.5).astype(float), y_valid_binary[:,bit]))
+=======
+        ber[bit] = torch.mean(1-np.isclose((pred_binary[:,bit] > 0.5).astype(float), y_valid_binary[:,bit]))
+>>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
         if ber[bit]>0.5: #flip bitmapping
             ber[bit]=1-ber[bit]
     return ber, y_valid_binary,pred_binary
@@ -125,8 +140,23 @@ def GMI(SERs, M, ber=None):
     M_all=np.product(M)
     gmi_est=0
     for mod in range(np.size(M)):
+<<<<<<< HEAD
         Pe = min(SERs[mod],0.5) # all bit are simultaneously wrong
         gmi_est += np.log2(M[mod])*(1+Pe*np.log2(Pe+1e-12)+(1-Pe)*np.log2((1-Pe)+1e-12))
+=======
+        #if SERs[mod]<=0.74:
+        Pe = SERs[mod]/np.log2(M[mod])
+        gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
+        #elif SERs[mod]>=0.4 and SERs[mod]<=0.74:
+        #    Pe=0.5
+        #    gmi_est+= (Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
+        #elif SERs[mod]>0.74:  # basically no mutual information because guessing would be equally good
+        #    pass
+        #Pe = 1-(1-SERs[mod])**(1/np.log2(M[mod]))
+        
+        #Pe = SERs[mod] # only one bit contributes to errors
+        #gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
+>>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
     if ber!=None:
         gmi=[]
         for num in range(len(M)):
@@ -151,7 +181,11 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     batches_per_epoch=train_params[1]
     learn_rate =train_params[2]
     N_valid=10000
+<<<<<<< HEAD
     weight=np.ones(len(M))
+=======
+    weight=torch.ones(len(M))
+>>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
     printing=False #suppresses all pinted output but GMI
 
     # Generate Validation Data
@@ -321,14 +355,21 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                         for dnum in range(np.size(M)):
                             if dnum==0:
                                 decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](received))
+<<<<<<< HEAD
                                 cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1])))).to(device)
+=======
+                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))).detach()).to(device)
+>>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
                             else:
                                 decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))))
+                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))).detach())
                     
                     elif canc_method=='nn':
                         for dnum in range(np.size(M)):
+<<<<<<< HEAD
                             #FIXME: turn genie-aided cancellation into real canceller
+=======
+>>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
                             if dnum==0:
                                 decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](received)
                                 cancelled =(canc[dnum](received,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
@@ -429,7 +470,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 weight[num] += 1
             #elif validation_SERs[num][epoch]<0.01:
             #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
-        weight=weight/np.sum(weight)*np.size(M) # normalize weight sum
+        weight=weight/torch.sum(weight)*len(M) # normalize weight sum
         gmi[epoch],gmi_exact[epoch]=GMI(validation_SERs[:,epoch],M,validation_BER[epoch])
         #print("weight set to "+str(weight))
         print("GMI is: "+ str(gmi[epoch]) + " bit after epoch %d" %(epoch))
@@ -451,7 +492,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
         if np.sum(validation_SERs[:,epoch])<0.3:
             #set weights back if under threshold
-            weight=np.ones(np.size(M))
+            weight=torch.ones(len(M))
         
         validation_received.append(channel.detach().cpu().numpy())
 
@@ -631,7 +672,11 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
 
 # ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
 #canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
+<<<<<<< HEAD
 Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=False)
+=======
+#Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=False)
+>>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
 
 #canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
 #_,en, dec, gmi, ser = Multipl_NOMA([4,4],[0.08,0.08],train_params=[50,300,0.001],canc_method='div', modradius=[1,1], plotting=True)
