@@ -104,8 +104,8 @@ def BER(predictions, labels,m):
     ber=torch.zeros(int(np.log2(m)))
     for bit in range(int(np.log2(m))):
         ber[bit] = np.mean(1-np.isclose((pred_binary[:,bit] > 0.5).astype(float), y_valid_binary[:,bit]))
-        if ber[bit]>0.5:
-            ber[bit]=1-ber[bit]
+        #if ber[bit]>0.5:
+        #    ber[bit]=1-ber[bit]
     return ber, y_valid_binary,pred_binary
 
 
@@ -114,11 +114,11 @@ def GMI(SERs, M, ber=None):
     M_all=np.product(M)
     gmi_est=0
     for mod in range(np.size(M)):
-        Pe = 1/(1-SERs[mod])*SERs[mod]/np.log2(M[mod])
+        #Pe = 1/(1-min(0.5,SERs[mod]))*SERs[mod]/np.log2(M[mod])
         #Pe = 1-(1-SERs[mod])**(1/np.log2(M[mod]))
         #gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
-        #Pe = SERs[mod] # only one bit contributes to errors
-        gmi_est+= np.log2(M[mod])+np.log2(M[mod])*(Pe*np.log2(Pe+1e-12)+(1-Pe)*np.log2((1-Pe)+1e-12))
+        Pe = min(SERs[mod],0.5) # all bit are simultaneously wrong
+        gmi_est += np.log2(M[mod])*(1+Pe*np.log2(Pe+1e-12)+(1-Pe)*np.log2((1-Pe)+1e-12))
     if ber!=None:
         gmi=[]
         for num in range(len(M)):
@@ -540,7 +540,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     #plt.tight_layout()
 
     plt.figure("GMIs",figsize=(3,2.5))
-    plt.plot(GMIs,marker='.',linestyle='--',label='Appr.')
+    plt.plot(GMIs,linestyle='--',label='Appr.')
     #plt.plot(max_GMI,GMIs[max_GMI],c='red')
     for num in range(np.size(gmi_exact[0,:])):
         if num==0:
@@ -554,7 +554,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
     plt.xlabel('epoch no.')
     plt.ylabel('GMI')
-    #plt.legend(loc=3)
+    plt.legend(loc=3)
     plt.grid(which='both')
     plt.title('GMI on Validation Dataset')
     plt.tight_layout()
@@ -623,7 +623,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
 # ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
 #canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
 begin_time = datetime.datetime.now()
-Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=True)
+Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1/3*np.sqrt(2)], plotting=True)
 print(datetime.datetime.now() - begin_time)
 #canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
 #_,en, dec, gmi, ser = Multipl_NOMA([4,4],[0.08,0.08],train_params=[50,300,0.001],canc_method='div', modradius=[1,1], plotting=True)
