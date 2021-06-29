@@ -10,9 +10,9 @@ import pickle
 runs = 10
 num_epochs=60
 
-sigma_n=[0.08,0.08]
-M=[4,4]
-alph=[1,1/3*np.sqrt(2)]
+sigma_n=cp.array([0.03,0.03,0.03])
+M=cp.array([4,4,4])
+alph=cp.array([1,1/3*np.sqrt(2),np.sqrt(2)/9])
 #alph=[1,1]
 
 params=[runs,num_epochs,sigma_n,M,alph]

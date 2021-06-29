@@ -1,14 +1,17 @@
 from os import error
 from numpy.core.fromnumeric import argmax
+import numpy as np
 import torch
+from torch._C import dtype
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
+import numpy as cp
 import matplotlib.pyplot as plt
 import matplotlib
 import datetime
+import cupy as cp
 
-matplotlib.use("pgf")
+#matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
     'font.family': 'serif',
@@ -16,16 +19,15 @@ matplotlib.rcParams.update({
     'pgf.rcfonts': False,
 })
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-torch.autograd.set_detect_anomaly(True)
-
-matplotlib.use("pgf")
-matplotlib.rcParams.update({
-    "pgf.texsystem": "pdflatex",
-    'font.family': 'serif',
-    'text.usetex': True,
-    'pgf.rcfonts': False,
-})
+""" font = {
+    'size'   : 10}
+    #plt.rc('font', **font)
+    #plt.rc('text', usetex=True)
+    plt.rcParams.update({
+    "text.usetex": True,
+    #"font.family": "serif",
+    "font.serif": ["Computer Modern Roman"],
+    }) """
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.autograd.set_detect_anomaly(True)
@@ -33,11 +35,13 @@ torch.autograd.set_detect_anomaly(True)
 class Encoder(nn.Module):
     def __init__(self,M, mradius):
         super(Encoder, self).__init__()
-        # Define Transmitter Layer: Linear function, M input neurons (symbols), 2 output neurons (real and imaginary part)        
-        self.fcT1 = nn.Linear(M,2*M) 
-        self.fcT2 = nn.Linear(2*M, 2*M)
-        self.fcT3 = nn.Linear(2*M, 2*M) 
-        self.fcT5 = nn.Linear(2*M, 2)
+        self.M = torch.as_tensor(M, device='cuda')
+        self.mradius = torch.as_tensor(mradius, device='cuda')
+        # Define Transmitter Layer: Linear function, M icput neurons (symbols), 2 output neurons (real and imaginary part)        
+        self.fcT1 = nn.Linear(self.M,2*self.M, device=device) 
+        self.fcT2 = nn.Linear(2*self.M, 2*self.M,device=device)
+        self.fcT3 = nn.Linear(2*self.M, 2*self.M,device=device) 
+        self.fcT5 = nn.Linear(2*self.M, 2,device=device)
         self.modradius= mradius
 
         # Non-linearity (used in transmitter and receiver)
@@ -65,11 +69,12 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self,M):
         super(Decoder, self).__init__()
-        # Define Receiver Layer: Linear function, 2 input neurons (real and imaginary part), M output neurons (symbols)
-        self.fcR1 = nn.Linear(2,2*M,device=device) 
-        self.fcR2 = nn.Linear(2*M,2*M,device=device) 
-        self.fcR3 = nn.Linear(2*M,2*M,device=device) 
-        self.fcR5 = nn.Linear(2*M, M,device=device) 
+        # Define Receiver Layer: Linear function, 2 icput neurons (real and imaginary part), M output neurons (symbols)
+        self.M = torch.as_tensor(M, device='cuda')
+        self.fcR1 = nn.Linear(2,2*self.M,device=device) 
+        self.fcR2 = nn.Linear(2*self.M,2*self.M,device=device) 
+        self.fcR3 = nn.Linear(2*self.M,2*self.M,device=device) 
+        self.fcR5 = nn.Linear(2*self.M, self.M,device=device) 
         #self.alpha=torch.tensor([alph,alph])
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -88,11 +93,12 @@ class Decoder(nn.Module):
 class Canceller(nn.Module):
     def __init__(self,Mod):
         super(Canceller, self).__init__()
-        self.fcR1 = nn.Linear(2,Mod,device=device) 
-        self.fcR2 = nn.Linear(2,Mod,device=device) 
-        self.fcR3 = nn.Linear(Mod,Mod,device=device) 
-        self.fcR4 = nn.Linear(Mod,Mod,device=device) 
-        self.fcR5 = nn.Linear(Mod, 2,device=device) 
+        self.Mod = torch.as_tensor(Mod, device='cuda')
+        self.fcR1 = nn.Linear(2,self.Mod,device=device) 
+        self.fcR2 = nn.Linear(2,self.Mod,device=device) 
+        self.fcR3 = nn.Linear(self.Mod,self.Mod,device=device) 
+        self.fcR4 = nn.Linear(self.Mod,self.Mod,device=device) 
+        self.fcR5 = nn.Linear(self.Mod, 2,device=device) 
 
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -105,8 +111,8 @@ class Canceller(nn.Module):
         logits = logits/norm_factor
         return logits
     
-    def cancellation(self,inp, decout):
-        out = self.activation_function(self.fcR1(inp)).to(device)
+    def cancellation(self,icp, decout):
+        out = self.activation_function(self.fcR1(icp)).to(device)
         out += self.activation_function(self.fcR2(decout))
         out = self.activation_function(self.fcR3(out))
         out = self.activation_function(self.fcR4(out))
@@ -114,55 +120,38 @@ class Canceller(nn.Module):
         return logits
     
 def SER(predictions, labels):
-    s2=np.argmax(predictions, 1)
-    return (np.sum(s2 != labels) / predictions.shape[0])
+    s2 = torch.argmax(predictions, 1)
+    return torch.sum( s2!= labels)/predictions.shape[0]
 
 def BER(predictions, labels,m):
     # Bit representation of symbols
-    binaries = torch.from_numpy(np.reshape(np.unpackbits(np.uint8(np.arange(0,m))), (-1,8))).float()
-    binaries = binaries[:,int(8-np.log2(m)):]
-    y_valid_binary = binaries[labels,:].detach().cpu().numpy()
-    pred_binary = binaries[np.argmax(predictions,1),:].detach().cpu().numpy()
-    ber=torch.zeros(int(np.log2(m)))
-    for bit in range(int(np.log2(m))):
-<<<<<<< HEAD
-        ber[bit] = np.mean(1-np.isclose((pred_binary[:,bit] > 0.5).astype(float), y_valid_binary[:,bit]))
-=======
-        ber[bit] = torch.mean(1-np.isclose((pred_binary[:,bit] > 0.5).astype(float), y_valid_binary[:,bit]))
->>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
-        if ber[bit]>0.5: #flip bitmapping
+    binaries = cp.reshape(cp.unpackbits(cp.arange(0,m,dtype='uint8')), (-1,8))
+    binaries = torch.as_tensor(binaries[:,int(8-torch.log2(m)):], device=device)
+    y_valid_binary = binaries[labels,:]
+    pred_binary = binaries[torch.argmax(predictions, axis=1),:]
+    ber=torch.zeros(int(torch.log2(m)), device=device)
+    for bit in range(int(torch.log2(m))):
+        #print(torch.isclose(pred_binary[:,bit], y_valid_binary[:,bit],rtol=0.5))
+        #print(torch.mean(torch.isclose(pred_binary[:,bit], y_valid_binary[:,bit],rtol=0.5), dtype=float))
+        ber[bit] = 1-torch.mean(torch.isclose(pred_binary[:,bit], y_valid_binary[:,bit],rtol=0.5), dtype=float)
+        if ber[bit]>(0.5): #flip bitmapping
             ber[bit]=1-ber[bit]
+    #prob = 
     return ber, y_valid_binary,pred_binary
 
 
 def GMI(SERs, M, ber=None):
     # gmi estimate or calculation, if bers are given
-    M_all=np.product(M)
     gmi_est=0
-    for mod in range(np.size(M)):
-<<<<<<< HEAD
-        Pe = min(SERs[mod],0.5) # all bit are simultaneously wrong
-        gmi_est += np.log2(M[mod])*(1+Pe*np.log2(Pe+1e-12)+(1-Pe)*np.log2((1-Pe)+1e-12))
-=======
-        #if SERs[mod]<=0.74:
-        Pe = SERs[mod]/np.log2(M[mod])
-        gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
-        #elif SERs[mod]>=0.4 and SERs[mod]<=0.74:
-        #    Pe=0.5
-        #    gmi_est+= (Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
-        #elif SERs[mod]>0.74:  # basically no mutual information because guessing would be equally good
-        #    pass
-        #Pe = 1-(1-SERs[mod])**(1/np.log2(M[mod]))
-        
-        #Pe = SERs[mod] # only one bit contributes to errors
-        #gmi_est+= np.log2(M[mod])*(Pe*np.log2(Pe/0.5+1e-12)+(1-Pe)*np.log2((1-Pe)/0.5+1e-12))
->>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
+    for mod in range(len(M)):
+        Pe = torch.min(SERs[mod],torch.tensor(0.5)) # all bit are simultaneously wrong
+        gmi_est += torch.log2(M[mod])*(1+Pe*torch.log2(Pe+1e-12)+(1-Pe)*torch.log2((1-Pe)+1e-12))
     if ber!=None:
-        gmi=[]
+        gmi=torch.zeros(len(M),int(torch.log2(max(M))))
         for num in range(len(M)):
-            for x in range(int(np.log2(M[num]))):
-                gmi.append((1+(ber[num][x]*np.log2(ber[num][x]+1e-12)+(1-ber[num][x])*np.log2((1-ber[num][x])+1e-12))).detach().numpy())    
-        return gmi_est, np.array(gmi)
+            for x in range(int(torch.log2(M[num]))):
+                gmi[num][x]=((1+(ber[num][x]*torch.log2(ber[num][x]+1e-12)+(1-ber[num][x])*torch.log2((1-ber[num][x])+1e-12))))    
+        return gmi_est, gmi.flatten()
     else:
         return gmi_est
 
@@ -181,22 +170,19 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     batches_per_epoch=train_params[1]
     learn_rate =train_params[2]
     N_valid=10000
-<<<<<<< HEAD
-    weight=np.ones(len(M))
-=======
     weight=torch.ones(len(M))
->>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
     printing=False #suppresses all pinted output but GMI
 
     # Generate Validation Data
-    rng = np.random.default_rng()
-    y_valid = rng.integers(0,M,size=(N_valid,np.size(M)))
+    y_valid = torch.zeros((N_valid,len(M)),dtype=int, device=device)
+    for num in range(len(M)):
+        y_valid[:,num]= torch.randint(0,M[num],(N_valid,))
 
     if plotting==True:
         # meshgrid for plotting
         ext_max = 1.5  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
-        mgx,mgy = np.meshgrid(np.linspace(-ext_max,ext_max,70), np.linspace(-ext_max,ext_max,70))
-        meshgrid = np.column_stack((np.reshape(mgx,(-1,1)),np.reshape(mgy,(-1,1))))
+        mgx,mgy = cp.meshgrid(cp.linspace(-ext_max,ext_max,70), cp.linspace(-ext_max,ext_max,70))
+        meshgrid = cp.column_stack((cp.reshape(mgx,(-1,1)),cp.reshape(mgy,(-1,1))))
     
     if encoder==None:
         enc=nn.ModuleList().to(device)
@@ -204,7 +190,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         optimizer=[]
 
         if canc_method=='none' or canc_method=='div':
-            for const in range(np.size(M)):
+            for const in range(len(M)):
                 enc.append(Encoder(M[const], modradius[const]))
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
@@ -223,7 +209,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         
         elif canc_method=='nn':
             canc = nn.ModuleList().to(device)
-            for const in range(np.size(M)):
+            for const in range(len(M)):
                 enc.append(Encoder(M[const],modradius[const]))
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
@@ -232,27 +218,28 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 #if const==0:
                 #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
-                optimizer[const].append(optim.Adam(enc[const].parameters(),lr=learn_rate))
-                optimizer[const].append(optim.Adam(dec[const].parameters(),lr=learn_rate))
+                optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)))
+                optimizer[const].append(optim.Adam(dec[const].parameters(),lr=float(learn_rate)))
                 if const>0:
-                    canc.append(Canceller(np.product(M)))
+                    canc.append(Canceller(torch.prod(M)))
                 #    optimizer.add_param_group({'params':enc[const].parameters()})
                 #    optimizer.add_param_group({'params':canc[const-1].parameters()})
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
-                    optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=learn_rate))
+                    optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=float(learn_rate)))
             
     else:
         enc=encoder
-        dec=torch.empty(len(M),device=device)
+        #dec=torch.empty(len(M),device=device)
+        dec=nn.ModuleList().to(device)
         optimizer=[]
         lhelp=len(encoder)
 
         if canc_method=='none' or canc_method=='div':
-            for const in range(np.size(M)):
+            for const in range(len(M)):
                 optimizer.append([])
                 if const>=lhelp:
                     enc.append(Encoder(M[const], modradius[const]))
-                dec[const]=Decoder(M[const])
+                dec.append(Decoder(M[const]))
                 enc[const].to(device)
                 # Adam Optimizer
                 #if const==0:
@@ -264,17 +251,18 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 if const<lhelp:
                     print("skip encoder optim for enc" + str(const))
                     #pass
-                    optimizer[const].append(optim.Adam(enc[const].parameters(), lr=learn_rate*0.01))
+                    optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)*0.01))
                 else:
-                    optimizer[const].append(optim.Adam(enc[const].parameters(), lr=learn_rate))
-                optimizer[const].append(optim.Adam(dec[const].parameters(), lr=learn_rate))
+                    optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)))
+                optimizer[const].append(optim.Adam(dec[const].parameters(), lr=float(learn_rate)))
                 
         
         elif canc_method=='nn':
             canc = []
-            for const in range(np.size(M)):
+            for const in range(len(M)):
                 #enc.append(Encoder(M[const],modradius[const]))
-                dec[const]=(Decoder(M[const]))
+                #dec[const]=(Decoder(M[const]))
+                dec.append(Decoder(M[const]))
                 
                 # Adam Optimizer
                 optimizer.append([])
@@ -282,18 +270,18 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
                 if const<lhelp:
-                    optimizer[const].append(optim.Adam(enc[const].parameters(),lr=learn_rate*0.01))
+                    optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)*0.01))
                 else:
                     enc.append(Encoder(M[const],modradius[const]))
-                    optimizer[const].append(optim.Adam(enc[const].parameters(),lr=learn_rate))
-                optimizer[const].append(optim.Adam(dec[const].parameters(),lr=learn_rate))
+                    optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)))
+                optimizer[const].append(optim.Adam(dec[const].parameters(),lr=float(learn_rate)))
                 enc[const].to(device)
                 if const>0:
-                    canc.append(Canceller(np.product(M)))
+                    canc.append(Canceller(torch.prod(M)))
                 #    optimizer.add_param_group({'params':enc[const].parameters()})
                 #    optimizer.add_param_group({'params':canc[const-1].parameters()})
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
-                    optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=learn_rate))
+                    optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=float(learn_rate)))
             
 
 #optimizer.add_param_group({"params": h_est})
@@ -307,34 +295,27 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     loss_fn = nn.CrossEntropyLoss()
 
     # Vary batch size during training
-    batch_size_per_epoch = np.linspace(100,10000,num=num_epochs)
+    batch_size_per_epoch = cp.linspace(100,10000,int(num_epochs))
 
     validation_BER = []
-    validation_SERs = np.zeros((np.size(M),num_epochs))
+    validation_SERs = torch.zeros((len(M),int(num_epochs)))
     validation_received = []
-    if plotting==True:
-        decision_region_evolution = []
-        constellations = []
-        # constellations only used for plotting
-        constellation_base = []
-
-        for modulator in range(np.size(M)):
-            constellation_base.append([])
-
+    
     print('Start Training')
-    bitnumber = int(np.sum(np.log2(M)))
-    gmi = np.zeros(num_epochs)
-    gmi_exact = np.zeros((num_epochs, bitnumber))
-    for epoch in range(num_epochs):
-        batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),np.size(M), device=device)
+    bitnumber = int(torch.sum(torch.log2(M)))
+    gmi = torch.zeros(int(num_epochs))
+    gmi_exact = torch.zeros((int(num_epochs), bitnumber))
+
+    for epoch in range(int(num_epochs)):
+        batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),len(M),dtype=torch.long, device=device)
         validation_BER.append([])
-        for step in range(batches_per_epoch):
+        for step in range(int(batches_per_epoch)):
             # Generate training data: In most cases, you have a dataset and do not generate a training dataset during training loop
             # sample new mini-batch directory on the GPU (if available)
-            decoded=torch.zeros((len(M),int(batch_size_per_epoch[epoch]),max(M)), device=device)
-            for num in range(np.size(M)):        
-                batch_labels[:,num].random_(M[num])
-                batch_labels_o = torch.zeros(int(batch_size_per_epoch[epoch]), M[num], device=device)
+            decoded=torch.zeros((int(len(M)),int(batch_size_per_epoch[epoch]),(torch.max(M))), device=device)
+            for num in range(len(M)):        
+                batch_labels[:,num].random_(int(M[num]))
+                batch_labels_o = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[num]), device=device)
                 batch_labels_o[range(batch_labels_o.shape[0]), batch_labels[:,num].long()]=1
                 batch_labels_onehot = batch_labels_o
                 if num==0:
@@ -346,239 +327,215 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels_onehot)))))
                     received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
-                if num==np.size(M)-1:
+                if num==len(M)-1:
                     if canc_method=='none':
-                        for dnum in range(np.size(M)):
+                        for dnum in range(len(M)):
                             decoded[dnum]=(dec[dnum](received))
                     
                     elif canc_method=='div':
-                        for dnum in range(np.size(M)):
+                        for dnum in range(len(M)):
                             if dnum==0:
-                                decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](received))
-<<<<<<< HEAD
-                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1])))).to(device)
-=======
-                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))).detach()).to(device)
->>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
+                                decoded[len(M)-dnum-1]=(dec[len(M)-dnum-1](received))
+                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1]))).detach()).to(device)
                             else:
-                                decoded[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1]))).detach())
+                                decoded[len(M)-dnum-1]=(dec[len(M)-dnum-1](cancelled))
+                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1]))).detach())
                     
                     elif canc_method=='nn':
-                        for dnum in range(np.size(M)):
-<<<<<<< HEAD
-                            #FIXME: turn genie-aided cancellation into real canceller
-=======
->>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
+                        for dnum in range(len(M)):
                             if dnum==0:
-                                decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](received)
+                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](received)
                                 cancelled =(canc[dnum](received,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
-                                #cancelled = canc[dnum](received,enc[np.size(M)-dnum-1](batch_labels_onehot[np.size(M)-dnum-1]))
-                            elif dnum==np.size(M)-1:
-                                decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](cancelled)
+                                #cancelled = canc[dnum](received,enc[len(M)-dnum-1](batch_labels_onehot[len(M)-dnum-1]))
+                            elif dnum==len(M)-1:
+                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
                             else:
-                                decoded[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](cancelled)
-                                cancelled =(canc[dnum](cancelled,enc[np.size(M)-dnum-1](softmax(decoded[np.size(M)-dnum-1])).detach()))
-                                #cancelled = canc[dnum](cancelled,enc[np.size(M)-dnum-1](batch_labels_onehot[np.size(M)-dnum-1]))
+                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
+                                cancelled =(canc[dnum](cancelled,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
+                                #cancelled = canc[dnum](cancelled,enc[len(M)-dnum-1](batch_labels_onehot[len(M)-dnum-1]))
             # Calculate Loss
-            for num in range(np.size(M)):
-            #num=np.mod(epoch,np.size(M))
+            for num in range(int(len(M))):
+                b, bpred, blabel = BER(softmax(decoded[num]), batch_labels[:,num],M[num])
+            #num=cp.mod(epoch,len(M))
             # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
                 if num==0:
-                    loss = weight[0]*loss_fn(decoded[0], batch_labels[:,0].long())
+                    loss = loss_fn(decoded[0], batch_labels[:,0].long())
                 else:
-                    loss = loss.clone()+ weight[num]*loss_fn(decoded[num], batch_labels[:,num].long())
+                    loss += loss_fn(decoded[num], batch_labels[:,num].long())
                     
             loss.backward()
                 # compute gradients
                 #loss.backward()
             
                 # Adapt weights
-            for const in range(np.size(M)):
+            for const in range(len(M)):
                 for elem in optimizer[const]:
                     elem.step()
             
                 #optimizer.step()
 
                 # reset gradients
-            for const in range(np.size(M)):    
+            for const in range(len(M)):    
                 for elem in optimizer[const]:
                     elem.zero_grad()
 
             #optimizer.zero_grad()
-
-        # compute validation SER, SNR, GMI
-        if plotting==True:
-            cvalid = np.zeros(N_valid)
-        decoded_valid=[]
-        SNR = np.zeros(np.size(M))
-        for num in range(np.size(M)):
-            y_valid_onehot = np.eye(M[num])[y_valid[:,num]]
-            
-            if num==0:
-                encoded = enc[num](torch.Tensor(y_valid_onehot).to(device))
-                SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/sigma_n[num])
-                channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
-                # color map for plot
-                if plotting==True:
-                    cvalid=y_valid[:,num]
-            else:
-                encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](torch.Tensor(y_valid_onehot).to(device)))))
-                #sigma = sigma_n[num]*np.mean(np.abs(torch.view_as_complex(encoded).detach().numpy()))
-                SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/sigma_n[num])
-                channel = torch.add(encoded, sigma_n[num]*torch.randn(len(encoded),2).to(device))
-                #color map for plot
-                if plotting==True:
-                    cvalid= cvalid+M[num]*y_valid[:,num]
-            if num==np.size(M)-1 and canc_method=='none':
-                    for dnum in range(np.size(M)):
-                        decoded_valid.append(dec[dnum](channel))
-            if num==np.size(M)-1 and canc_method=='div':
-                for dnum in range(np.size(M)):
-                    decoded_valid.append([])
-                for dnum in range(np.size(M)):
-                    if dnum==0:
-                        decoded_valid[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](channel)
-                        cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-                    else:
-                        decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled))
-                        cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-            if num==np.size(M)-1 and canc_method=='nn':
-                cancelled=[]
-                for dnum in range(np.size(M)):
-                    decoded_valid.append([])
-                for dnum in range(np.size(M)):
-                    if dnum==0:
-                        decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](channel))
-                        # canceller
-                        cancelled.append(canc[dnum](channel,enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-                    elif dnum==np.size(M)-1:
-                        decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[dnum-1]))
-                    else:
-                        decoded_valid[np.size(M)-dnum-1]=(dec[np.size(M)-dnum-1](cancelled[dnum-1]))
-                        cancelled.append(canc[dnum](cancelled[dnum-1],enc[np.size(M)-dnum-1](softmax(decoded_valid[np.size(M)-dnum-1]))))
-
-
-        for num in range(len(M)):
-            validation_BER[epoch].append(BER(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num],M[num])[0])
-            validation_SERs[num][epoch] = SER(softmax(decoded_valid[num]).detach().cpu().numpy().squeeze(), y_valid[:,num])
-            if printing==True:
-                print('Validation BER after epoch %d for encoder %d: ' % (epoch,num) + str(validation_BER[epoch][num].data.tolist()) +' (loss %1.8f)' % (loss.detach().cpu().numpy()))  
-                print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))              
-            if validation_SERs[num][epoch]>0.5 and epoch>10:
-                #Weight is increased, when error probability is higher than symbol probability -> misclassification 
-                weight[num] += 1
-            #elif validation_SERs[num][epoch]<0.01:
-            #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
-        weight=weight/torch.sum(weight)*len(M) # normalize weight sum
-        gmi[epoch],gmi_exact[epoch]=GMI(validation_SERs[:,epoch],M,validation_BER[epoch])
-        #print("weight set to "+str(weight))
-        print("GMI is: "+ str(gmi[epoch]) + " bit after epoch %d" %(epoch))
-        #print("BER is: "+ str(summed_MI[epoch]) + " bit")
-        if printing==True:
-            print("SNR is: "+ str(SNR)+" dB")
-        if epoch==0:
-            enc_best=enc
-            dec_best=dec
-            if canc_method=='nn':
-                canc_best=canc
-            best_epoch=0
-        elif gmi[epoch]>gmi[best_epoch]:
-            enc_best=enc
-            dec_best=dec
-            if canc_method=='nn':
-                canc_best=canc
-            best_epoch=0
-
-        if np.sum(validation_SERs[:,epoch])<0.3:
-            #set weights back if under threshold
-            weight=torch.ones(len(M))
-        
-        validation_received.append(channel.detach().cpu().numpy())
-
-        if plotting==True:
-            for num in range(np.size(M)):
-                constellation_base[num].append(torch.view_as_complex(enc[num](torch.eye(M[num]))))
-                #constellation_base[1].append(torch.view_as_complex(enc[0].network_transmitter(torch.eye(M[0]))))
+        with torch.no_grad():
+            # compute validation SER, SNR, GMI
+            if plotting==True:
+                cvalid = torch.zeros(N_valid)
+            decoded_valid=torch.zeros((int(len(M)),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
+            SNR = torch.zeros(int(len(M)))
+            for num in range(len(M)):
+                y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,num]]
+                
                 if num==0:
-                    encoded = constellation_base[num][epoch].repeat(M[num+1])/M[num+1]
-                    encoded = torch.reshape(encoded,(M[num+1],int(np.size(encoded.detach().cpu().numpy())/M[num+1])))
-                    #print(encoded)
-                elif num<np.size(M)-1:
-                    helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
-                    encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten().repeat(M[num+1])/M[num+1]
-                    encoded = torch.reshape(encoded,(M[num+1],int(len(encoded)/M[num+1])))
+                    encoded = enc[num](y_valid_onehot).to(device)
+                    SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded)))/(float(sigma_n[num]))
+                    channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    # color map for plot
+                    if plotting==True:
+                        cvalid=y_valid[:,num]
                 else:
-                    helper = torch.reshape(constellation_base[num][epoch].repeat(M[num]),(M[num], int(constellation_base[num][epoch].size()[0])))
-                    encoded = torch.matmul(torch.transpose(encoded,0,1),helper).flatten()
+                    encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](y_valid_onehot))))
+                    #sigma = sigma_n[num]*cp.mean(cp.abs(torch.view_as_complex(encoded).detach().numpy()))
+                    SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/float(sigma_n[num]))
+                    channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    #color map for plot
+                    if plotting==True:
+                        cvalid= cvalid+int(M[num])*y_valid[:,num]
+                if num==len(M)-1 and canc_method=='none':
+                        for dnum in range(len(M)):
+                            decoded_valid[dnum]=dec[dnum](channel)
+                if num==len(M)-1 and canc_method=='div':
+                    for dnum in range(len(M)):
+                        if dnum==0:
+                            decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](channel)
+                            cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded_valid[len(M)-dnum-1]))))
+                        else:
+                            decoded_valid[len(M)-dnum-1]=(dec[len(M)-dnum-1](cancelled))
+                            cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded_valid[len(M)-dnum-1]))))
+                if num==len(M)-1 and canc_method=='nn':
+                    #cancelled=[]
+                    for dnum in range(len(M)):
+                        if dnum==0:
+                            decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](channel).detach()
+                            # canceller
+                            cancelled = (canc[dnum](channel,enc[int(len(M))-dnum-1](softmax(torch.as_tensor(decoded_valid[len(M)-dnum-1], dtype=torch.float32 ,device=device)))))
+                        elif dnum==len(M)-1:
+                            decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](cancelled).detach()
+                        else:
+                            decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
+                            cancelled = (canc[dnum](cancelled[dnum-1],enc[len(M)-dnum-1](softmax(torch.as_tensor(decoded_valid[len(M)-dnum-1], dtype=torch.float32 ,device=device)))))
+
+
+            for num in range(len(M)):
+                validation_BER[epoch].append(BER(softmax(decoded_valid[num]), y_valid[:,num],M[num])[0])
+                validation_SERs[num][epoch] = SER(softmax(decoded_valid[num]), y_valid[:,num])
+                if printing==True:
+                    print('Validation BER after epoch %d for encoder %d: ' % (epoch,num) + str(validation_BER[epoch][num].data.tolist()) +' (loss %1.8f)' % (loss.detach().cpu().numpy()))  
+                    print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))              
+                if validation_SERs[num][epoch]>0.5 and epoch>10:
+                    #Weight is increased, when error probability is higher than symbol probability -> misclassification 
+                    weight[num] += 1
+                #elif validation_SERs[num][epoch]<0.01:
+                #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
+            weight=weight/torch.sum(weight)*len(M) # normalize weight sum
+            gmi[epoch],gmi_exact[epoch]=GMI(validation_SERs[:,epoch],M,validation_BER[epoch])
+            #print("weight set to "+str(weight))
+            print("GMI is: "+ str(torch.sum(gmi_exact[epoch]).item()) + " bit after epoch %d (loss: %1.8f)" %(epoch,loss.detach().cpu().numpy()))
+            #print("BER is: "+ str(summed_MI[epoch]) + " bit")
+            if printing==True:
+                print("SNR is: "+ str(SNR)+" dB")
+            if epoch==0:
+                enc_best=enc
+                dec_best=dec
+                if canc_method=='nn':
+                    canc_best=canc
+                best_epoch=0
+            elif torch.sum(gmi_exact[epoch])>torch.sum(gmi_exact[best_epoch]):
+                enc_best=enc
+                dec_best=dec
+                if canc_method=='nn':
+                    canc_best=canc
+                best_epoch=0
+
+            if torch.sum(validation_SERs[:,epoch])<0.3:
+                #set weights back if under threshold
+                weight=torch.ones(len(M))
+            
+            validation_received.append(cp.asarray(channel.detach()))
+
+    if plotting==True:
+        decision_region_evolution = []
+        #constellations = []
+        # constellations only used for plotting
+        constellation_base = []
+        for num in range(len(M)):
+            constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
         
-            constellations.append(encoded.detach().cpu().numpy())
-        
-            # store decision region for generating the animation
-            if canc_method=='none':
-                for num in range(np.size(M)):
-                    decision_region_evolution.append([])
-                    mesh_prediction = softmax(dec[num](torch.Tensor(meshgrid).to(device)))
-                    decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
-            elif canc_method=='div':
-                for num in range(np.size(M)):
-                    decision_region_evolution.append([])
-                    if num==0:
-                        mesh_prediction = softmax(dec[np.size(M)-num-1](torch.Tensor(meshgrid).to(device)))
-                        canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[np.size(M)-num-1](mesh_prediction)))
-                    else:
-                        mesh_prediction = softmax(dec[np.size(M)-num-1](canc_grid))
-                        canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[np.size(M)-num-1](mesh_prediction)))
-                    decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+    
+        constellations = cp.asarray(constellation_base[0])
+        for num in range(len(M)-1):
+            constellationsplus = cp.asarray(constellation_base[num+1])
+            constellations = cp.kron(constellations,constellationsplus)
+    
+    
+    # store decision region of best implementation
+    if canc_method=='none':
+        for num in range(len(M)):
+            decision_region_evolution.append([])
+            mesh_prediction = softmax(dec_best[num](torch.Tensor(meshgrid).to(device)))
+            decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+    elif canc_method=='div':
+        for num in range(len(M)):
+            decision_region_evolution.append([])
+            if num==0:
+                mesh_prediction = softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device)))
+                canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
             else:
-                mesh_prediction=[]
-                for dnum in range(np.size(M)):
-                    decision_region_evolution.append([])
-                    mesh_prediction.append([])
-                for dnum in range(np.size(M)):
-                    if dnum==0:
-                        mesh_prediction[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](torch.Tensor(meshgrid).to(device))
-                        cancelled=canc[dnum](torch.Tensor(meshgrid).to(device),enc[np.size(M)-dnum-1](softmax(mesh_prediction[np.size(M)-dnum-1])))
-                    elif dnum==np.size(M)-1:
-                        mesh_prediction[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](cancelled)
-                    else:
-                        mesh_prediction[np.size(M)-dnum-1]=dec[np.size(M)-dnum-1](cancelled)
-                        cancelled=(canc[dnum](cancelled,enc[np.size(M)-dnum-1](softmax(mesh_prediction[np.size(M)-dnum-1]))))
-                    decision_region_evolution[np.size(M)-dnum-1].append(0.195*mesh_prediction[np.size(M)-dnum-1].detach().cpu().numpy() +0.4)
+                mesh_prediction = softmax(dec_best[len(M)-num-1](canc_grid))
+                canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
+            decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+    else:
+        mesh_prediction=[]
+        for dnum in range(len(M)):
+            decision_region_evolution.append([])
+            mesh_prediction.append([])
+        for dnum in range(len(M)):
+            if dnum==0:
+                mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](torch.Tensor(meshgrid).to(device))
+                cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1](softmax(mesh_prediction[len(M)-dnum-1])))
+            elif dnum==len(M)-1:
+                mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
+            else:
+                mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
+                cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1](softmax(mesh_prediction[len(M)-dnum-1]))))
+            decision_region_evolution[len(M)-dnum-1].append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
 
             
     print('Training finished')
     if plotting==True:
-        plot_training(validation_SERs, validation_received,cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact) 
-    max_GMI = np.argmax(gmi)
+        plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact) 
+    max_GMI = torch.argmax(gmi)
     if canc_method=='nn':
         return(canc_method,enc_best,dec_best,canc_best, gmi, validation_SERs,gmi_exact)
     else:
         return(canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact)
 
-def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution, meshgrid, constellation_base, gmi_exact):
+def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolution, meshgrid, constellation_base, gmi_exact):
     cmap = matplotlib.cm.tab20
     base = plt.cm.get_cmap(cmap)
     color_list = base.colors
-    new_color_list = [[t/2 + 0.5 for t in color_list[k]] for k in range(len(color_list))]
+    new_color_list = np.array([[t/2 + 0.49 for t in color_list[k]] for k in range(len(color_list))])
 
-    sum_SERs = np.sum(SERs, axis=0)/np.size(M)
-    min_SER_iter = np.argmin(np.sum(SERs,axis=0))
-    max_GMI = np.argmax(GMIs)
-    ext_max_plot = 1.2*np.max(np.abs(valid_r[min_SER_iter]))
+    sum_SERs = np.sum(SERs, axis=0)/len(M)
+    min_SER_iter = np.argmin(cp.sum(SERs,axis=0))
+    max_GMI = np.argmax(GMIs_appr)
+    ext_max_plot = 1.2*np.max(np.abs(valid_r[int(min_SER_iter)]))
 
     plt.figure("SERs",figsize=(3,3))
-    font = {#'family': 'serif', 
-    'size'   : 10}
-    plt.rc('font', **font)
-    #plt.rc('text', usetex=True)
-    plt.rcParams.update({
-    "text.usetex": True,
-    #"font.family": "serif",
-    "font.serif": ["Computer Modern Roman"],
-    })
-
-    for num in range(np.size(M)):
+    for num in range(len(M)):
         plt.plot(SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
         plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',c='red')
         plt.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
@@ -590,9 +547,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     #plt.tight_layout()
 
     plt.figure("GMIs",figsize=(3,2.5))
-    plt.plot(GMIs,linestyle='--',label='Appr.')
-    #plt.plot(max_GMI,GMIs[max_GMI],c='red')
-    for num in range(np.size(gmi_exact[0,:])):
+    plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
+    #plt.plot(max_GMI,GMIs_appr[max_GMI],c='red')
+    for num in range(len(gmi_exact[0,:])):
         if num==0:
             t=gmi_exact[:,num]
             plt.fill_between(np.arange(len(t)),t, alpha=0.4)
@@ -609,9 +566,10 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     plt.title('GMI on Validation Dataset')
     plt.tight_layout()
 
+    constellations = np.array(const.get()).flatten()
     plt.figure("constellation")
     #plt.subplot(121)
-    plt.scatter(np.real(const[min_SER_iter].flatten()),np.imag(const[min_SER_iter].flatten()),c=range(np.product(M)), cmap='tab20',s=50)
+    plt.scatter(np.real(constellations),np.imag(constellations),c=range(np.product(M.cpu().detach().numpy())), cmap='tab20',s=50)
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$')
     plt.ylabel(r'$\Im\{r\}$')
@@ -620,11 +578,11 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     plt.grid(which='both')
     plt.title('Constellation')
 
-    val_cmplx=valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]
+    val_cmplx=np.array((valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]).get())
 
     plt.figure("Received signal",figsize=(2.7,2.7))
     #plt.subplot(122)
-    plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000], cmap='tab20',s=2)
+    plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000].cpu().detach().numpy(), cmap='tab20',s=2)
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$')
     plt.ylabel(r'$\Im\{r\}$')
@@ -635,20 +593,21 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
     plt.tight_layout()
 
     print('Minimum mean SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(SERs[0])))
-    print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (GMIs[max_GMI],max_GMI,len(GMIs)))
-    print('The corresponding constellation symbols are:\n', const[min_SER_iter])
+    print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (GMIs_appr[max_GMI],max_GMI,len(GMIs_appr)))
+    print('The corresponding constellation symbols are:\n', const)
     
     
     plt.figure("Decision regions", figsize=(5,3))
-    for num in range(np.size(M)):
-        plt.subplot(1,np.size(M),num+1)
-        decision_scatter = np.argmax(decision_region_evolution[num][min_SER_iter], 1)
+    for num in range(len(M)):
+        plt.subplot(1,len(M),num+1)
+        decision_scatter = np.argmax(decision_region_evolution[num], axis=0)
+        grid=meshgrid.get()
         if num==0:
-            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:M[num]]))
+            plt.scatter(grid[:,0], grid[:,1], c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:int(M[num])]))
         else:
-            plt.scatter(meshgrid[:,0], meshgrid[:,1], c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[M[num-1]:M[num-1]+M[num]]))
+            plt.scatter(meshgrid[:,0].get(), meshgrid[:,1].get(), c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[int(M[num-1]):int(M[num-1])+int(M[num])]))
         #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
-        plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000], cmap='tab20',s=2)
+        plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000].cpu().detach().numpy(), cmap='tab20',s=2)
         plt.axis('scaled')
         #plt.xlim((-ext_max_plot,ext_max_plot))
         #plt.ylim((-ext_max_plot,ext_max_plot))
@@ -658,9 +617,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
         plt.tight_layout()
 
     plt.figure("Base Constellations")
-    for num in range(np.size(M)):
-        plt.subplot(1,np.size(M),num+1)
-        plt.scatter(np.real(constellation_base[num][min_SER_iter].detach().numpy()),np.imag(constellation_base[num][min_SER_iter].detach().numpy()), c=np.arange(M[num]))
+    for num in range(len(M)):
+        plt.subplot(1,len(M),num+1)
+        plt.scatter(np.real(constellation_base[num]),np.imag(constellation_base[num]), c=np.arange(int(M[num])))
         plt.xlim((-ext_max_plot,ext_max_plot))
         plt.ylim((-ext_max_plot,ext_max_plot))
         plt.xlabel(r'$\Re\{r\}$')
@@ -670,15 +629,14 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs, decision_region_evolution,
 
     plt.show()
 
-# ideal modradius: [1,1/3*np.sqrt(2),np.sqrt(2)*1/9]
-#canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
-<<<<<<< HEAD
-Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=False)
-=======
-#Multipl_NOMA(M=[4,4],sigma_n=[0.08,0.08],train_params=[60,300,0.0025],canc_method='nn', modradius=[1,1], plotting=False)
->>>>>>> 6f16136d81a422aa733313b235acfbd8dc71c131
-
-#canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*np.sqrt(2)], plotting=False)
+# ideal modradius: [1,1/3*cp.sqrt(2),cp.sqrt(2)*1/9]
+# #canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*cp.sqrt(2)], plotting=False)
+M=torch.tensor([4,4], dtype=int)
+sigma_n=torch.tensor([0.08,0.08], dtype=float)
+begin_time = datetime.datetime.now()
+Multipl_NOMA(M,sigma_n,train_params=cp.array([60,300,0.002]),canc_method='nn', modradius=cp.array([1,1]), plotting=True)
+print(datetime.datetime.now() - begin_time)
+#canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*cp.sqrt(2)], plotting=False)
 #_,en, dec, gmi, ser = Multipl_NOMA([4,4],[0.08,0.08],train_params=[50,300,0.001],canc_method='div', modradius=[1,1], plotting=True)
-#Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.02],train_params=[150,1000,0.0008],canc_method='none', modradius=[1,1.5/3*np.sqrt(2),np.sqrt(2)*1.5/9], plotting=True, encoder=enc_best)
+#Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.02],train_params=[150,1000,0.0008],canc_method='none', modradius=[1,1.5/3*cp.sqrt(2),cp.sqrt(2)*1.5/9], plotting=True, encoder=enc_best)
 
