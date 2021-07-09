@@ -600,14 +600,14 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             
     print('Training finished')
     if plotting==True:
-        plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact) 
+        plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     max_GMI = torch.argmax(gmi)
     if canc_method=='nn':
         return(canc_method,enc_best,dec_best,canc_best, gmi, validation_SERs,gmi_exact)
     else:
         return(canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact)
 
-def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolution, meshgrid, constellation_base, gmi_exact):
+def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolution, meshgrid, constellation_base, gmi_exact, gmi_hd):
     cmap = matplotlib.cm.tab20
     base = plt.cm.get_cmap(cmap)
     color_list = base.colors
@@ -636,17 +636,18 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
 
     plt.figure("GMIs",figsize=(3,2.5))
     plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
+    plt.plot(gmi_hd,linestyle='--',label='GMI Hard decision')
     #plt.plot(max_GMI,GMIs_appr[max_GMI],c='red')
     for num in range(len(gmi_exact[0,:])):
         if num==0:
             t=gmi_exact[:,num]
-            plt.fill_between(np.arange(len(t.detach().cpu().numpy())),t.detach().cpu().numpy(), alpha=0.4)
+            plt.fill_between(np.arange(len(t)),t, alpha=0.4)
         else:
-            plt.fill_between(np.arange(len(t.detach().cpu().numpy())),t.detach().cpu().numpy(),(t+gmi_exact[:,num]).detach().cpu().numpy(),alpha=0.4)
+            plt.fill_between(np.arange(len(t)),t,(t+gmi_exact[:,num]),alpha=0.4)
             t+=gmi_exact[:,num]
-    plt.plot(t.detach().cpu().numpy(), label='GMI')
-    plt.plot(argmax(t.detach().cpu().numpy()),max(t.detach().cpu().numpy()),marker='o',c='red')
-    plt.annotate('Max', (0.95*argmax(t.detach().cpu().numpy()),0.9*max(t.detach().cpu().numpy())),c='red')
+    plt.plot(t, label='GMI')
+    plt.plot(argmax(t),max(t),marker='o',c='red')
+    plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
     plt.xlabel('epoch no.')
     plt.ylabel('GMI')
     plt.legend(loc=3)
