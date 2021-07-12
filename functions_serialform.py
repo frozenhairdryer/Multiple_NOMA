@@ -13,7 +13,7 @@ import cupy as cp
 
 
 #torch.autograd.set_detect_anomaly(True)
-#matplotlib.use("pgf")
+matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
     'font.family': 'serif',
@@ -242,8 +242,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
     if plotting==True:
         # meshgrid for plotting
-        ext_max = 1.5  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
-        mgx,mgy = cp.meshgrid(cp.linspace(-ext_max,ext_max,70), cp.linspace(-ext_max,ext_max,70))
+        ext_max = 1.2  # assume we normalize the constellation to unit energy than 1.5 should be sufficient in most cases (hopefully)
+        mgx,mgy = cp.meshgrid(cp.linspace(-ext_max,ext_max,200), cp.linspace(-ext_max,ext_max,200))
         meshgrid = cp.column_stack((cp.reshape(mgx,(-1,1)),cp.reshape(mgy,(-1,1))))
     
     if encoder==None:
@@ -431,13 +431,14 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
                 if num==0:
                     #loss = 3*weight[0]*cBCEloss(decoded[0], batch_labels[:,0].long(),M[num])
-                    loss = weight[0]*loss_fn(softmax(decoded[0]), batch_labels[:,0].long())
+                    #loss = weight[0]*loss_fn(softmax(decoded[0]), batch_labels[:,0].long())
                     #loss = weight[0]*torch.sum(BER(softmax(decoded[0]), batch_labels[:,0],M[0])[0]).requires_grad()
+                    loss = weight[num]*(torch.log2(M[num])-torch.sum(GMI(M[num],softmax(decoded[0]), batch_labels[:,0].long())))
                 else:
                     #loss = loss.clone()+ 3*weight[num]*cBCEloss(decoded[num], batch_labels[:,num].long(),M[num])
-                    loss += weight[num]*loss_fn(softmax(decoded[num]), batch_labels[:,num].long())
+                    #loss += weight[num]*loss_fn(softmax(decoded[num]), batch_labels[:,num].long())
                     #loss = loss.clone() + weight[num]*torch.sum(BER(softmax(decoded[num]), batch_labels[:,num], M[num])[0])
-
+                    loss += weight[num]*(torch.log2(M[num])-torch.sum(GMI(M[num],softmax(decoded[num]), batch_labels[:,num].long())))
             #loss.register_hook(lambda grad: print(grad)) 
             #decoded.register_hook(lambda grad: print(grad))
             #modulated.register_hook(lambda grad: print(grad))  
@@ -464,7 +465,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             if plotting==True:
                 cvalid = torch.zeros(N_valid)
             decoded_valid=torch.zeros((int(len(M)),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
-            SNR = torch.zeros(int(len(M)))
+            SNR = torch.zeros(int(len(M)), device=device)
             for num in range(len(M)):
                 y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,num]]
                 
@@ -584,7 +585,6 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     else:
         mesh_prediction=[]
         for dnum in range(len(M)):
-            decision_region_evolution.append([])
             mesh_prediction.append([])
         for dnum in range(len(M)):
             if dnum==0:
@@ -595,7 +595,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             else:
                 mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
                 cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1](softmax(mesh_prediction[len(M)-dnum-1]))))
-            decision_region_evolution[len(M)-dnum-1].append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
+            decision_region_evolution.append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
+        decision_region_evolution = decision_region_evolution[::-1] 
 
             
     print('Training finished')
@@ -619,7 +620,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     ext_max_plot = 1.2*np.max(np.abs(valid_r[int(min_SER_iter)]))
 
     print('Minimum mean SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(SERs[0])))
-    print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (torch.sum(gmi_exact[max_GMI]),max_GMI,len(GMIs_appr)))
+    print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (np.sum(gmi_exact[max_GMI]),max_GMI,len(GMIs_appr)))
     print('The corresponding constellation symbols are:\n', const)
 
     plt.figure("SERs",figsize=(3,3))
@@ -632,7 +633,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid(which='both')
     plt.legend(loc=1)
     plt.title('SER on Validation Dataset')
-    #plt.tight_layout()
+    plt.tight_layout()
+    plt.savefig("SERs.pgf")
 
     plt.figure("GMIs",figsize=(3,2.5))
     plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
@@ -654,18 +656,31 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid(which='both')
     plt.title('GMI on Validation Dataset')
     plt.tight_layout()
+    plt.savefig("gmis.pgf")
+
 
     constellations = np.array(const.get()).flatten()
-    plt.figure("constellation")
+    bitmapping=[]
+    torch.prod(M)
+    int(torch.prod(M))
+    helper= np.arange((int(torch.prod(M))))
+    for h in helper:
+        bitmapping.append(format(h, '04b'))
+
+    plt.figure("constellation", figsize=(3,2.5))
     #plt.subplot(121)
     plt.scatter(np.real(constellations),np.imag(constellations),c=range(np.product(M.cpu().detach().numpy())), cmap='tab20',s=50)
+    for i in range(len(constellations)):
+        plt.annotate(bitmapping[i], (np.real(constellations)[i], np.imag(constellations)[i]))
+    
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$')
     plt.ylabel(r'$\Im\{r\}$')
-    plt.xlim((-2,2))
-    plt.ylim((-2,2))
+    plt.xlim((-1.5,1.5))
+    plt.ylim((-1.5,1.5))
     plt.grid(which='both')
     plt.title('Constellation')
+    plt.savefig("constellation.pgf")
 
     val_cmplx=np.array((valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]).get())
 
@@ -680,6 +695,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid()
     plt.title('Received')
     plt.tight_layout()
+    plt.savefig("received.pgf")
 
     
     
@@ -687,12 +703,12 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.figure("Decision regions", figsize=(5,3))
     for num in range(len(M)):
         plt.subplot(1,len(M),num+1)
-        decision_scatter = np.argmax(decision_region_evolution[num], axis=0)
+        decision_scatter = np.argmax(decision_region_evolution[num], axis=1)
         grid=meshgrid.get()
         if num==0:
-            plt.scatter(grid[:,0], grid[:,1], c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:int(M[num])]))
+            plt.scatter(grid[:,0], grid[:,1], c=decision_scatter,s=2,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:int(M[num])]))
         else:
-            plt.scatter(meshgrid[:,0].get(), meshgrid[:,1].get(), c=decision_scatter,s=3,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[int(M[num-1]):int(M[num-1])+int(M[num])]))
+            plt.scatter(grid[:,0], grid[:,1], c=decision_scatter,s=2,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[int(M[num-1]):int(M[num-1])+int(M[num])]))
         #plt.scatter(validation_received[min_SER_iter][0:4000,0], validation_received[min_SER_iter][0:4000,1], c=y_valid[0:4000], cmap='tab20',s=4)
         plt.scatter(np.real(val_cmplx[0:1000]), np.imag(val_cmplx[0:1000]), c=cvalid[0:1000].cpu().detach().numpy(), cmap='tab20',s=2)
         plt.axis('scaled')
@@ -701,28 +717,37 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
         plt.xlabel(r'$\Re\{r\}$')
         plt.ylabel(r'$\Im\{r\}$')
         plt.title('Decoder %d' % num)
-        plt.tight_layout()
+    plt.tight_layout()
+    plt.savefig("decision_regions.pgf")
 
+    
     plt.figure("Base Constellations")
     for num in range(len(M)):
+        bitm=[]
+        helper= np.arange(int(M[num]))
+        for h in helper:
+            bitm.append(format(h, '02b'))
         plt.subplot(1,len(M),num+1)
         plt.scatter(np.real(constellation_base[num]),np.imag(constellation_base[num]), c=np.arange(int(M[num])))
+        for bit in range(len(bitm)):
+            plt.annotate(bitm[bit],(np.real(constellation_base[num][bit]),np.imag(constellation_base[num][bit])))
         plt.xlim((-ext_max_plot,ext_max_plot))
         plt.ylim((-ext_max_plot,ext_max_plot))
         plt.xlabel(r'$\Re\{r\}$')
         plt.ylabel(r'$\Im\{r\}$')
         plt.grid()
-        plt.tight_layout()
+    plt.tight_layout()
+    plt.savefig("base_constellations.pgf")
 
-    plt.show()
+    #plt.show()
 
 # ideal modradius: [1,1/3*cp.sqrt(2),cp.sqrt(2)*1/9]
 # #canc_method,enc_best,dec_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.005],canc_method='none', modradius=[1,1.5/3*cp.sqrt(2)], plotting=False)
-M=torch.tensor([4,4], dtype=int)
-sigma_n=torch.tensor([0.08,0.08], dtype=float)
-begin_time = datetime.datetime.now()
-Multipl_NOMA(M,sigma_n,train_params=cp.array([120,300,0.001]),canc_method='nn', modradius=cp.array([1,1]), plotting=True)
-print(datetime.datetime.now() - begin_time)
+#M=torch.tensor([4,4], dtype=int)
+#sigma_n=torch.tensor([0.08,0.08], dtype=float)
+#begin_time = datetime.datetime.now()
+#Multipl_NOMA(M,sigma_n,train_params=cp.array([120,300,0.001]),canc_method='nn', modradius=cp.array([1,1]), plotting=True)
+#print(datetime.datetime.now() - begin_time)
 #canc_method,enc_best,dec_best,canc_best, smi, validation_SERs=Multipl_NOMA(M=[4,4],sigma_n=[0.01,0.1],train_params=[50,300,0.008],canc_method='nn', modradius=[1,1.5/3*cp.sqrt(2)], plotting=False)
 #_,en, dec, gmi, ser = Multipl_NOMA([4,4],[0.08,0.08],train_params=[50,300,0.001],canc_method='div', modradius=[1,1], plotting=True)
 #Multipl_NOMA(M=[4,4,4],sigma_n=[0.03,0.03,0.02],train_params=[150,1000,0.0008],canc_method='none', modradius=[1,1.5/3*cp.sqrt(2),cp.sqrt(2)*1.5/9], plotting=True, encoder=enc_best)
