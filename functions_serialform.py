@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import datetime
 import cupy as cp
-
+import tikzplotlib
 
 #torch.autograd.set_detect_anomaly(True)
 matplotlib.use("pgf")
@@ -19,17 +19,9 @@ matplotlib.rcParams.update({
     'font.family': 'serif',
     'text.usetex': True,
     'pgf.rcfonts': False,
+    'font.size' : 10,
 })
 
-""" font = {
-    'size'   : 10}
-    #plt.rc('font', **font)
-    #plt.rc('text', usetex=True)
-    plt.rcParams.update({
-    "text.usetex": True,
-    #"font.family": "serif",
-    "font.serif": ["Computer Modern Roman"],
-    }) """
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -89,6 +81,10 @@ class Decoder(nn.Module):
         #out = self.activation_function(self.fcR3(out))
         
         logits = self.activation_function(self.fcR5(out))
+        #norm_factor=1
+        #if torch.sum(logits)>15:
+        #    norm_factor = 15 #norm factor stabilizes training: output higher than 20 leads to nan
+        logits = logits - torch.max(logits)
         return logits
 
 class Canceller(nn.Module):
@@ -119,32 +115,6 @@ class Canceller(nn.Module):
         out = self.activation_function(self.fcR4(out))
         logits = self.activation_function(self.fcR5(out))
         return logits
-
-def cBCEloss(my_outputs, mylabels,M):
-     #specifying the batch size
-    #my_batch_size, M = my_outputs.size()
-    #calculating the log of softmax values           
-    #calculate bitwise mapping:
-    binaries = torch.tensor(cp.reshape(cp.unpackbits(cp.arange(0,M,dtype='uint8')), (-1,8)),dtype=torch.float32, device=device)
-    binaries = binaries[:,int(8-torch.log2(M)):]
-    b_outputs = binaries[mylabels]
-    # calculate bitwise estimates
-    bitnum = int(torch.log2(M))
-    b_estimates = torch.zeros(len(my_outputs),bitnum, device=device)
-    P_sym = torch.bincount(mylabels)/len(mylabels)
-    for bit in range(bitnum):
-        pos_0 = torch.where(binaries[:,bit]==0)[0]
-        pos_1 = torch.where(binaries[:,bit]==1)[0]
-        #est_0 = torch.sum(torch.index_select(P_sym,0,pos_0)*torch.index_select(my_outputs,1,pos_0), axis=1)
-        #est_1 = torch.sum(torch.index_select(my_outputs,1,pos_1), axis=1)
-        b_estimates[:,bit]=torch.sum(torch.index_select(P_sym,0,pos_0)*torch.index_select(my_outputs,1,pos_0), axis=1)
-        #b_estimates[:,bit,1]=torch.sum(torch.index_select(P_sym,0,pos_1)*torch.index_select(my_outputs,1,pos_1), axis=1)
-    loss = nn.BCEWithLogitsLoss()
-    #_, b_outputs, b_estimates = BER(my_outputs, mylabels, M)
-    return loss(b_estimates.flatten(),b_outputs.flatten())
-
-
-
 
 
 def SER(predictions, labels):
@@ -187,7 +157,7 @@ def GMI_est(SERs, M, ber=None):
 def GMI(M, my_outputs, mylabels):
     # gmi estimate or calculation, if bers are given
     if mylabels!=None and my_outputs!=None:
-        gmi=torch.zeros(int(torch.log2(M)))
+        gmi=torch.zeros(int(torch.log2(M)), device=device)
         binaries = torch.tensor(cp.reshape(cp.unpackbits(cp.arange(0,M,dtype='uint8')), (-1,8)),dtype=torch.float32, device=device)
         binaries = binaries[:,int(8-torch.log2(M)):]
         b_labels = binaries[mylabels].int()
@@ -209,13 +179,32 @@ def GMI(M, my_outputs, mylabels):
             #print(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1))
             gmi[bit]=1-1/(len(llr))*torch.sum(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1+1e-12), axis=0)
             #gmi[bit] = torch.mean(est_00*torch.log2((est_00+1e-12)/(torch.sum(torch.index_select(P_sym,0,pos_0))*est_0))+est_01*torch.log2((est_01+1e-12)/(torch.sum(torch.index_select(P_sym,0,pos_1))*est_0))+est_10*torch.log2((est_10+1e-12)/(torch.sum(torch.index_select(P_sym,0,pos_0))*est_1))+est_11*torch.log2((est_11+1e-12)/(torch.sum(torch.index_select(P_sym,0,pos_1))*est_1)))
-            
         #for num in range(len(M)):
             #for x in range(int(torch.log2(M[num]))):
                 #gmi[num][x]=((1+(ber[num][x]*torch.log2(ber[num][x]+1e-12)+(1-ber[num][x])*torch.log2((1-ber[num][x])+1e-12))))    
         return gmi.flatten()
 
-        
+def customloss(M, my_outputs, mylabels):
+    loss=torch.zeros(int(torch.log2(M)), device=device)
+    binaries = torch.tensor(cp.reshape(cp.unpackbits(cp.arange(0,M,dtype='uint8')), (-1,8)),dtype=torch.float32, device=device)
+    binaries = binaries[:,int(8-torch.log2(M)):]
+    b_labels = binaries[mylabels].int()
+    # calculate bitwise estimates
+    bitnum = int(torch.log2(M))
+    #b_estimates = torch.zeros(len(my_outputs),bitnum, device=device)
+    #P_sym = torch.bincount(mylabels)/len(mylabels)
+    for bit in range(bitnum):
+        pos_0 = torch.where(binaries[:,bit]==0)[0]
+        pos_1 = torch.where(binaries[:,bit]==1)[0]
+        est_0 = torch.sum(torch.index_select(my_outputs,1,pos_0), axis=1)
+        est_1 = torch.sum(torch.index_select(my_outputs,1,pos_1), axis=1)
+        #print(my_outputs)
+        #b_estimates[:,bit]=torch.sum(torch.index_select(P_sym,0,pos_0)*torch.index_select(my_outputs,1,pos_0), axis=1)
+        llr = torch.log(est_0/est_1+1e-12)
+        #print(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1))
+        loss[bit]=1/(len(llr))*torch.sum(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1+1e-12), axis=0)
+    return torch.sum(loss)
+
 
 def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
     # train_params=[num_epochs,batches_per_epoch, learn_rate]
@@ -351,7 +340,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     if canc_method!='nn' and canc_method!='none' and canc_method!='div':
         raise error("Cancellation method invalid. Choose 'none','nn', or 'div'")
 
-    softmax = nn.Softmax(dim=1).to(device)
+    softmax = nn.LogSoftmax(dim=1).to(device)
 
     # Cross Entropy loss
     loss_fn = nn.CrossEntropyLoss()
@@ -424,8 +413,11 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                                 decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
                                 #cancelled =(canc[dnum](cancelled,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
                                 cancelled = (canc[dnum](cancelled,enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                            #decoded.register_hook(lambda grad: print(grad))
             # Calculate Loss
             for num in range(int(len(M))):
+                if torch.sum(decoded[num].detach()).isnan():
+                    print("STOP")
                 #b = BER(softmax(decoded[num]), batch_labels[:,num],M[num])
             #num=cp.mod(epoch,len(M))
             # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
@@ -433,16 +425,19 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     #loss = 3*weight[0]*cBCEloss(decoded[0], batch_labels[:,0].long(),M[num])
                     #loss = weight[0]*loss_fn(softmax(decoded[0]), batch_labels[:,0].long())
                     #loss = weight[0]*torch.sum(BER(softmax(decoded[0]), batch_labels[:,0],M[0])[0]).requires_grad()
-                    loss = weight[num]*(torch.log2(M[num])-torch.sum(GMI(M[num],softmax(decoded[0]), batch_labels[:,0].long())))
+                    loss = weight[num]*(customloss(M[num],torch.exp(softmax(decoded[0])), batch_labels[:,0].long()))
                 else:
                     #loss = loss.clone()+ 3*weight[num]*cBCEloss(decoded[num], batch_labels[:,num].long(),M[num])
                     #loss += weight[num]*loss_fn(softmax(decoded[num]), batch_labels[:,num].long())
                     #loss = loss.clone() + weight[num]*torch.sum(BER(softmax(decoded[num]), batch_labels[:,num], M[num])[0])
-                    loss += weight[num]*(torch.log2(M[num])-torch.sum(GMI(M[num],softmax(decoded[num]), batch_labels[:,num].long())))
+                    loss += weight[num]*(customloss(M[num],torch.exp(softmax(decoded[num])), batch_labels[:,num].long()))
             #loss.register_hook(lambda grad: print(grad)) 
             #decoded.register_hook(lambda grad: print(grad))
-            #modulated.register_hook(lambda grad: print(grad))  
-
+            #modulated.register_hook(lambda grad: print(grad)) 
+            #print("modulated:")
+            #modulated.register_hook(lambda grad: print(grad))
+            #print("decoded:") 
+            #decoded.register_hook(lambda grad: print(grad)) 
             loss.backward()
                 # compute gradients
                 #loss.backward()
@@ -511,8 +506,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
 
             for num in range(len(M)):
-                validation_BER[epoch].append(BER(softmax(decoded_valid[num]), y_valid[:,num],M[num]))
-                validation_SERs[num][epoch] = SER(softmax(decoded_valid[num]), y_valid[:,num])
+                validation_BER[epoch].append(BER(torch.exp(softmax(decoded_valid[num])), y_valid[:,num],M[num]))
+                validation_SERs[num][epoch] = SER(torch.exp(softmax(decoded_valid[num])), y_valid[:,num])
                 if printing==True:
                     print('Validation BER after epoch %d for encoder %d: ' % (epoch,num) + str(validation_BER[epoch][num].data.tolist()) +' (loss %1.8f)' % (loss.detach().cpu().numpy()))  
                     print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))              
@@ -521,7 +516,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     weight[num] += 1
                 #elif validation_SERs[num][epoch]<0.01:
                 #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
-                gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],softmax(decoded_valid[num]), y_valid[:,num])
+                gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],torch.exp(softmax(decoded_valid[num])), y_valid[:,num])
             weight=weight/torch.sum(weight)*len(M) # normalize weight sum
             gmi[epoch], t =GMI_est(validation_SERs[:,epoch],M,validation_BER[epoch])
             gmi_est2[epoch] = torch.sum(t)
@@ -566,36 +561,36 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             constellations = cp.kron(constellations,constellationsplus)
     
     
-    # store decision region of best implementation
-    if canc_method=='none':
-        for num in range(len(M)):
-            decision_region_evolution.append([])
-            mesh_prediction = softmax(dec_best[num](torch.Tensor(meshgrid).to(device)))
-            decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
-    elif canc_method=='div':
-        for num in range(len(M)):
-            decision_region_evolution.append([])
-            if num==0:
-                mesh_prediction = softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device)))
-                canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
-            else:
-                mesh_prediction = softmax(dec_best[len(M)-num-1](canc_grid))
-                canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
-            decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
-    else:
-        mesh_prediction=[]
-        for dnum in range(len(M)):
-            mesh_prediction.append([])
-        for dnum in range(len(M)):
-            if dnum==0:
-                mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](torch.Tensor(meshgrid).to(device))
-                cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1](softmax(mesh_prediction[len(M)-dnum-1])))
-            elif dnum==len(M)-1:
-                mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
-            else:
-                mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
-                cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1](softmax(mesh_prediction[len(M)-dnum-1]))))
-            decision_region_evolution.append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
+        # store decision region of best implementation
+        if canc_method=='none':
+            for num in range(len(M)):
+                decision_region_evolution.append([])
+                mesh_prediction = torch.exp(softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
+                decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+        elif canc_method=='div':
+            for num in range(len(M)):
+                decision_region_evolution.append([])
+                if num==0:
+                    mesh_prediction = torch.exp(softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
+                else:
+                    mesh_prediction = torch.exp(softmax(dec_best[len(M)-num-1](canc_grid)))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
+                decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+        else:
+            mesh_prediction=[]
+            for dnum in range(len(M)):
+                mesh_prediction.append([])
+            for dnum in range(len(M)):
+                if dnum==0:
+                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](torch.Tensor(meshgrid).to(device))
+                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1](torch.exp(softmax(mesh_prediction[len(M)-dnum-1]))))
+                elif dnum==len(M)-1:
+                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
+                else:
+                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
+                    cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1](torch.exp(softmax(mesh_prediction[len(M)-dnum-1])))))
+                decision_region_evolution.append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
         decision_region_evolution = decision_region_evolution[::-1] 
 
             
@@ -623,10 +618,10 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (np.sum(gmi_exact[max_GMI]),max_GMI,len(GMIs_appr)))
     print('The corresponding constellation symbols are:\n', const)
 
-    plt.figure("SERs",figsize=(3,3))
+    plt.figure("SERs",figsize=(3.5,3.5))
     for num in range(len(M)):
-        plt.plot(SERs[num],marker='.',linestyle='--', label="Enc"+str(num))
-        plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',c='red')
+        plt.plot(SERs[num],marker='.',linestyle='--',markersize=2, label="Enc"+str(num))
+        plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',markersize=3,c='red')
         plt.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
     plt.xlabel('epoch no.')
     plt.ylabel('SER')
@@ -634,7 +629,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.legend(loc=1)
     plt.title('SER on Validation Dataset')
     plt.tight_layout()
-    plt.savefig("SERs.pgf")
+    #tikzplotlib.clean_figure()
+    tikzplotlib.save("figures/SERs.tex")
 
     plt.figure("GMIs",figsize=(3,2.5))
     plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
@@ -656,7 +652,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid(which='both')
     plt.title('GMI on Validation Dataset')
     plt.tight_layout()
-    plt.savefig("gmis.pgf")
+    tikzplotlib.save("figures/gmis.tex")
 
 
     constellations = np.array(const.get()).flatten()
@@ -667,9 +663,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     for h in helper:
         bitmapping.append(format(h, '04b'))
 
-    plt.figure("constellation", figsize=(3,2.5))
+    plt.figure("constellation", figsize=(3,3))
     #plt.subplot(121)
-    plt.scatter(np.real(constellations),np.imag(constellations),c=range(np.product(M.cpu().detach().numpy())), cmap='tab20',s=50)
+    plt.scatter(np.real(constellations),np.imag(constellations),s=50)
     for i in range(len(constellations)):
         plt.annotate(bitmapping[i], (np.real(constellations)[i], np.imag(constellations)[i]))
     
@@ -680,7 +676,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.ylim((-1.5,1.5))
     plt.grid(which='both')
     plt.title('Constellation')
-    plt.savefig("constellation.pgf")
+    plt.tight_layout()
+    
+    tikzplotlib.save("figures/constellation.tex")
 
     val_cmplx=np.array((valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]).get())
 
@@ -695,7 +693,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid()
     plt.title('Received')
     plt.tight_layout()
-    plt.savefig("received.pgf")
+    
+    tikzplotlib.save("figures/received.tex")
 
     
     
@@ -718,7 +717,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
         plt.ylabel(r'$\Im\{r\}$')
         plt.title('Decoder %d' % num)
     plt.tight_layout()
-    plt.savefig("decision_regions.pgf")
+    #tikzplotlib.clean_figure()
+    tikzplotlib.save("decision_regions.tex")
 
     
     plt.figure("Base Constellations")
@@ -737,7 +737,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
         plt.ylabel(r'$\Im\{r\}$')
         plt.grid()
     plt.tight_layout()
-    plt.savefig("base_constellations.pgf")
+    #tikzplotlib.clean_figure()
+    tikzplotlib.save("base_constellations.tex")
 
     #plt.show()
 
