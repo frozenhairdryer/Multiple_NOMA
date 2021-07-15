@@ -13,7 +13,6 @@ import cupy as cp
 import tikzplotlib
 
 #torch.autograd.set_detect_anomaly(True)
-matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
     'font.family': 'serif',
@@ -84,8 +83,10 @@ class Decoder(nn.Module):
         #norm_factor=1
         #if torch.sum(logits)>15:
         #    norm_factor = 15 #norm factor stabilizes training: output higher than 20 leads to nan
-        logits = logits - torch.max(logits)
-        return logits
+        lmax =  torch.max(logits, 1).values
+        #for l in range(len(logits)):
+        logits = torch.transpose(torch.transpose(logits,0,1) - lmax,0,1) # prevent very high and only low values -> better stability
+        return logits+1
 
 class Canceller(nn.Module):
     def __init__(self,Mod):
@@ -200,10 +201,10 @@ def customloss(M, my_outputs, mylabels):
         est_1 = torch.sum(torch.index_select(my_outputs,1,pos_1), axis=1)
         #print(my_outputs)
         #b_estimates[:,bit]=torch.sum(torch.index_select(P_sym,0,pos_0)*torch.index_select(my_outputs,1,pos_0), axis=1)
-        llr = torch.log(est_0/est_1+1e-12)
+        llr = torch.log((est_0+1e-12)/(est_1+1e-12)+1e-12)
         #print(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1))
         loss[bit]=1/(len(llr))*torch.sum(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1+1e-12), axis=0)
-    return torch.sum(loss)
+    return torch.sum(loss)+0.1
 
 
 def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
@@ -222,7 +223,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     learn_rate =train_params[2]
     N_valid=10000
     weight=torch.ones(len(M))
-    printing=True #suppresses all pinted output but GMI
+    printing=False #suppresses all pinted output but GMI
 
     # Generate Validation Data
     y_valid = torch.zeros((N_valid,len(M)),dtype=int, device=device)
@@ -340,7 +341,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     if canc_method!='nn' and canc_method!='none' and canc_method!='div':
         raise error("Cancellation method invalid. Choose 'none','nn', or 'div'")
 
-    softmax = nn.LogSoftmax(dim=1).to(device)
+    softmax = nn.Softmax(dim=1).to(device)
 
     # Cross Entropy loss
     loss_fn = nn.CrossEntropyLoss()
@@ -425,13 +426,15 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     #loss = 3*weight[0]*cBCEloss(decoded[0], batch_labels[:,0].long(),M[num])
                     #loss = weight[0]*loss_fn(softmax(decoded[0]), batch_labels[:,0].long())
                     #loss = weight[0]*torch.sum(BER(softmax(decoded[0]), batch_labels[:,0],M[0])[0]).requires_grad()
-                    loss = weight[num]*(customloss(M[num],torch.exp(softmax(decoded[0])), batch_labels[:,0].long()))
+                    loss = weight[num]*(customloss(M[num],(softmax(decoded[0])), batch_labels[:,0].long()))
                 else:
                     #loss = loss.clone()+ 3*weight[num]*cBCEloss(decoded[num], batch_labels[:,num].long(),M[num])
                     #loss += weight[num]*loss_fn(softmax(decoded[num]), batch_labels[:,num].long())
                     #loss = loss.clone() + weight[num]*torch.sum(BER(softmax(decoded[num]), batch_labels[:,num], M[num])[0])
-                    loss += weight[num]*(customloss(M[num],torch.exp(softmax(decoded[num])), batch_labels[:,num].long()))
-            #loss.register_hook(lambda grad: print(grad)) 
+                    loss += weight[num]*(customloss(M[num],(softmax(decoded[num])), batch_labels[:,num].long()))
+            #loss.register_hook(lambda grad: print(grad))
+            if loss.isnan():
+                print("STÖP")  
             #decoded.register_hook(lambda grad: print(grad))
             #modulated.register_hook(lambda grad: print(grad)) 
             #print("modulated:")
@@ -506,8 +509,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
 
             for num in range(len(M)):
-                validation_BER[epoch].append(BER(torch.exp(softmax(decoded_valid[num])), y_valid[:,num],M[num]))
-                validation_SERs[num][epoch] = SER(torch.exp(softmax(decoded_valid[num])), y_valid[:,num])
+                validation_BER[epoch].append(BER((softmax(decoded_valid[num])), y_valid[:,num],M[num]))
+                validation_SERs[num][epoch] = SER((softmax(decoded_valid[num])), y_valid[:,num])
                 if printing==True:
                     print('Validation BER after epoch %d for encoder %d: ' % (epoch,num) + str(validation_BER[epoch][num].data.tolist()) +' (loss %1.8f)' % (loss.detach().cpu().numpy()))  
                     print('Validation SER after epoch %d for encoder %d: %f (loss %1.8f)' % (epoch,num, validation_SERs[num][epoch], loss.detach().cpu().numpy()))              
@@ -516,7 +519,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     weight[num] += 1
                 #elif validation_SERs[num][epoch]<0.01:
                 #    optimizer[num][0].param_groups[0]['lr']=0.1*optimizer[num][0].param_groups[0]['lr'] # set encoder learning rate down if converged
-                gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],torch.exp(softmax(decoded_valid[num])), y_valid[:,num])
+                gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],(softmax(decoded_valid[num])), y_valid[:,num])
             weight=weight/torch.sum(weight)*len(M) # normalize weight sum
             gmi[epoch], t =GMI_est(validation_SERs[:,epoch],M,validation_BER[epoch])
             gmi_est2[epoch] = torch.sum(t)
@@ -565,16 +568,16 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         if canc_method=='none':
             for num in range(len(M)):
                 decision_region_evolution.append([])
-                mesh_prediction = torch.exp(softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
+                mesh_prediction = (softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
                 decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         elif canc_method=='div':
             for num in range(len(M)):
                 decision_region_evolution.append([])
                 if num==0:
-                    mesh_prediction = torch.exp(softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
+                    mesh_prediction = (softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
                     canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
                 else:
-                    mesh_prediction = torch.exp(softmax(dec_best[len(M)-num-1](canc_grid)))
+                    mesh_prediction = (softmax(dec_best[len(M)-num-1](canc_grid)))
                     canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
                 decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         else:
@@ -584,12 +587,12 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             for dnum in range(len(M)):
                 if dnum==0:
                     mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](torch.Tensor(meshgrid).to(device))
-                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1](torch.exp(softmax(mesh_prediction[len(M)-dnum-1]))))
+                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1]((softmax(mesh_prediction[len(M)-dnum-1]))))
                 elif dnum==len(M)-1:
                     mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
                 else:
                     mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
-                    cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1](torch.exp(softmax(mesh_prediction[len(M)-dnum-1])))))
+                    cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1]((softmax(mesh_prediction[len(M)-dnum-1])))))
                 decision_region_evolution.append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
         decision_region_evolution = decision_region_evolution[::-1] 
 
@@ -618,11 +621,12 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (np.sum(gmi_exact[max_GMI]),max_GMI,len(GMIs_appr)))
     print('The corresponding constellation symbols are:\n', const)
 
-    plt.figure("SERs",figsize=(3.5,3.5))
+    fig1, ax1 = plt.subplots(1,1,num="SERs",figsize=(3.5,3.5))
+    #plt.figure("SERs",figsize=(3.5,3.5))
     for num in range(len(M)):
-        plt.plot(SERs[num],marker='.',linestyle='--',markersize=2, label="Enc"+str(num))
-        plt.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',markersize=3,c='red')
-        plt.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
+        ax1.plot(SERs[num],marker='.',linestyle='--',markersize=2, label="Enc"+str(num))
+        ax1.plot(min_SER_iter,SERs[num][min_SER_iter],marker='o',markersize=3,c='red')
+        ax1.annotate('Min', (0.95*min_SER_iter,1.4*SERs[num][min_SER_iter]),c='red')
     plt.xlabel('epoch no.')
     plt.ylabel('SER')
     plt.grid(which='both')
@@ -630,7 +634,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.title('SER on Validation Dataset')
     plt.tight_layout()
     #tikzplotlib.clean_figure()
-    tikzplotlib.save("figures/SERs.tex")
+    plt.savefig("figures/Sers.png")
+    tikzplotlib.save("figures/SERs.tex", strict=True, externalize_tables=True, override_externals=True)
 
     plt.figure("GMIs",figsize=(3,2.5))
     plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
@@ -652,7 +657,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid(which='both')
     plt.title('GMI on Validation Dataset')
     plt.tight_layout()
-    tikzplotlib.save("figures/gmis.tex")
+    plt.savefig("figures/gmis.png")
+    tikzplotlib.save("figures/gmis.tex", strict=True, externalize_tables=True, override_externals=True)
 
 
     constellations = np.array(const.get()).flatten()
@@ -677,8 +683,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid(which='both')
     plt.title('Constellation')
     plt.tight_layout()
-    
-    tikzplotlib.save("figures/constellation.tex")
+    plt.savefig("figures/constellation.png")
+    tikzplotlib.save("figures/constellation.tex", strict=True, externalize_tables=True, override_externals=True)
 
     val_cmplx=np.array((valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]).get())
 
@@ -693,8 +699,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.grid()
     plt.title('Received')
     plt.tight_layout()
-    
-    tikzplotlib.save("figures/received.tex")
+    plt.savefig("figures/received.png")
+    tikzplotlib.save("figures/received.tex", strict=True, externalize_tables=True, override_externals=True)
 
     
     
@@ -718,7 +724,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
         plt.title('Decoder %d' % num)
     plt.tight_layout()
     #tikzplotlib.clean_figure()
-    tikzplotlib.save("decision_regions.tex")
+    plt.savefig("figures/decision_regions.png")
+    tikzplotlib.save("figures/decision_regions.tex", strict=True, externalize_tables=True, override_externals=True)
 
     
     plt.figure("Base Constellations")
@@ -738,8 +745,9 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
         plt.grid()
     plt.tight_layout()
     #tikzplotlib.clean_figure()
-    tikzplotlib.save("base_constellations.tex")
-
+    plt.savefig("figures/base_constellation.png")
+    tikzplotlib.save("figures/base_constellations.tex", strict=True, externalize_tables=True, override_externals=True)
+    #tikzplotlib.save(f'{output_path}{output_fname}.tex', figure=fig1, wrap=False, add_axis_environment=False, externalize_tables=True, override_externals=True)
     #plt.show()
 
 # ideal modradius: [1,1/3*cp.sqrt(2),cp.sqrt(2)*1/9]

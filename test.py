@@ -4,9 +4,8 @@ import pickle
 M=torch.tensor([4,4], dtype=int)
 sigma_n=torch.tensor([0.08,0.08], dtype=float)
 begin_time = datetime.datetime.now()
-Multipl_NOMA(M,sigma_n,train_params=cp.array([120,300,0.002]),canc_method='nn', modradius=cp.array([1,1]), plotting=True)
+Multipl_NOMA(M,sigma_n,train_params=cp.array([60,300,0.002]),canc_method='nn', modradius=cp.array([1,1]), plotting=True)
 print(datetime.datetime.now() - begin_time)                                     
-
 
 
 #sigma_n=torch.tensor([0.03,0.03,0.03])

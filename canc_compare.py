@@ -7,12 +7,12 @@ import pickle
 
 
 ### parameters
-runs = 10
+runs = 50
 num_epochs=60
 
-sigma_n=cp.array([0.03,0.03,0.03])
-M=cp.array([4,4,4])
-alph=cp.array([1,1/3*np.sqrt(2),np.sqrt(2)/9])
+sigma_n=torch.tensor([0.09,0.09])
+M=torch.tensor([4,4])
+alph=torch.tensor([1,1/3*np.sqrt(2)])
 #alph=[1,1]
 
 params=[runs,num_epochs,sigma_n,M,alph]
@@ -23,13 +23,14 @@ list_nocanc=[]
 #compare_data.append([])
 for item in range(runs):
     _,en, dec, gmi, ser, gmi_exact =Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.007],canc_method='none', modradius=alph, plotting=False)
-    GMI_nocanc.append(np.sum(gmi_exact, axis=1))
+    g = gmi_exact.detach().cpu().numpy()
+    GMI_nocanc.append(np.sum(g, axis=1))
     list_nocanc.append(ser)
     if item==0:
-        best_impl=[np.sum(gmi_exact, axis=1),en, dec, ser]
+        best_impl=[np.sum(g, axis=1),en, dec, ser]
         best_achieved='none'
-    elif max(np.sum(gmi_exact, axis=1))>max(best_impl[0]):
-        best_impl=[np.sum(gmi_exact, axis=1),en, dec, ser]
+    elif max(np.sum(g, axis=1))>max(best_impl[0]):
+        best_impl=[np.sum(g, axis=1),en, dec, ser]
         best_achieved='none' 
     #exec(open("nn_enc_dec.py").read())
     #list_nocanc.append(validation_SERs)
@@ -46,9 +47,10 @@ for item in range(runs):
         #exec(open("nn_enc_dec_divcanc.py").read())
         _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='div', modradius=alph, plotting=False)
         list_divcanc.append(ser)
-        GMI_divcanc.append(np.sum(gmi_exact, axis=1))
-        if max(np.sum(gmi_exact, axis=1))>max(best_impl[0]):
-            best_impl=[np.sum(gmi_exact, axis=1),en, dec, ser]
+        g = gmi_exact.detach().cpu().numpy()
+        GMI_divcanc.append(np.sum(g, axis=1))
+        if max(np.sum(g, axis=1))>max(best_impl[0]):
+            best_impl=[np.sum(g, axis=1),en, dec, ser]
             best_achieved='div'
     except:
         print("Diverges!")
@@ -64,13 +66,14 @@ for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
     _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph, plotting=False)
-    GMI_nncanc.append(np.sum(gmi_exact, axis=1))
+    g = gmi_exact.detach().cpu().numpy()
+    GMI_nncanc.append(np.sum(g, axis=1))
     list_nncanc.append(ser)
     if item==0:
-        best_impl=[np.sum(gmi_exact, axis=1),en, dec, canc, ser]
+        best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
         best_achieved='nn'
-    elif max(np.sum(gmi_exact, axis=1))>max(best_impl[0]):
-        best_impl=[np.sum(gmi_exact, axis=1),en, dec, canc, ser]
+    elif max(np.sum(g, axis=1))>max(best_impl[0]):
+        best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
         best_achieved='nn'
 
 ## save all data if further processing is wanted
