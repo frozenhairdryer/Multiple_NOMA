@@ -103,8 +103,8 @@ class Canceller(nn.Module):
 
     def forward(self, x, decoutput):
         # compute output
-        x=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(x)))+1j*torch.angle(torch.view_as_complex(x)))
-        decoutput=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(decoutput)))+1j*torch.angle(torch.view_as_complex(decoutput)))
+        #x=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(x)))+1j*torch.angle(torch.view_as_complex(x)))
+        #sdecoutput=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(decoutput)))+1j*torch.angle(torch.view_as_complex(decoutput)))
         logits = self.cancellation(x, decoutput)
         #norm_factor = torch.max(torch.abs(torch.view_as_complex(logits)).flatten())
         norm_factor = torch.mean(torch.abs(torch.view_as_complex(logits)).flatten()).to(device) # normalize mean amplitude to 1
