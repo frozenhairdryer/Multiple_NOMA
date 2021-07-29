@@ -30,7 +30,8 @@ class Encoder(nn.Module):
         #else:
         #    modulated = encoded
         if self.modradius!=1:
-            modulated = torch.view_as_real((1+self.modradius*torch.view_as_complex(modulated))/(1+self.modradius))
+            modulated = torch.view_as_real((1+self.modradius*torch.view_as_complex(modulated))/(torch.max(torch.abs(1+self.modradius*torch.view_as_complex(modulated)))))
+            #todo: fix nomralization of modradius
         return modulated
     
 
@@ -79,8 +80,8 @@ class Canceller(nn.Module):
 
     def forward(self, x, decoutput):
         # compute output
-        x=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(x)))+1j*torch.angle(torch.view_as_complex(x)))
-        decoutput=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(decoutput)))+1j*torch.angle(torch.view_as_complex(decoutput)))
+        #x=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(x))+1e-9)+1j*torch.angle(torch.view_as_complex(x)))
+        #decoutput=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(decoutput))+1e-9)+1j*torch.angle(torch.view_as_complex(decoutput)))
         logits = self.cancellation(x, decoutput)
         #norm_factor = torch.max(torch.abs(torch.view_as_complex(logits)).flatten())
         norm_factor = torch.mean(torch.abs(torch.view_as_complex(logits)).flatten()).to(device) # normalize mean amplitude to 1

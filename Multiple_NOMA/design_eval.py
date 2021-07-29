@@ -12,6 +12,7 @@ num_epochs=60
 sigma_n=torch.tensor([0.09,0.09])
 M=torch.tensor([4,4])
 alph=torch.tensor([1,1/3*np.sqrt(2)])
+alph1=torch.tensor([1,1])
 #alph=[1,1]
 
 params=[runs,num_epochs,sigma_n,M,alph]
@@ -24,7 +25,7 @@ list_freecanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph, plotting=False)
+    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph1, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_freecanc.append(np.sum(g, axis=1))
     list_freecanc.append(ser)
@@ -35,7 +36,6 @@ for item in range(runs):
         best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
         best_achieved='free'
 
-alph=torch.tensor([1,1/3*np.sqrt(2)])
 GMI_dpcanc=[]
 list_dpcanc=[]
 #compare_data.append([])
@@ -44,8 +44,8 @@ for item in range(runs):
     #plt.close('all')
     _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
-    GMI_freecanc.append(np.sum(g, axis=1))
-    list_freecanc.append(ser)
+    GMI_dpcanc.append(np.sum(g, axis=1))
+    list_dpcanc.append(ser)
     if max(np.sum(g, axis=1))>max(best_impl[0]):
         best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
         best_achieved='dp'
@@ -54,7 +54,7 @@ for item in range(runs):
 with open('Multiple_NOMA/best_impl_freevsdp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
     pickle.dump([best_impl, best_achieved, params], f)
 with open('Multiple_NOMA/gmis_compare_freevsdp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-    pickle.dump([list_freecanc,list_dpcanc, best_impl, best_achieved, params], f)
+    pickle.dump([GMI_freecanc,GMI_dpcanc, best_impl, best_achieved, params], f)
 print("Best implementation achieved with "+best_achieved+" cancellation.")
 
 ## figures
@@ -65,7 +65,7 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure("Free Learning", figsize=(4,3))
+plt.figure("Free Learning", figsize=(3.5,2))
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -103,13 +103,13 @@ for item in range(runs):
 
 
 
-plt.plot(average_freecanc, c=color_list[0],linewidth=2, label="no cancellation")
+plt.plot(average_freecanc, c=color_list[0],linewidth=2)
 #plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
 plt.fill_between(np.arange(num_epochs), average_freecanc+var_freecanc,average_freecanc-var_freecanc, color=color_list[0], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nocanc1+var_nocanc1,average_nocanc1-var_nocanc1, color=color_list[2], alpha=0.2)
 
 #plt.title("Training GMIs without cancellation")
-plt.legend(loc=4)
+#plt.legend(loc=4)
 #plt.yscale('log')
 plt.ylabel('GMI')
 plt.grid()
@@ -118,18 +118,18 @@ plt.tight_layout()
 plt.savefig('Multiple_NOMA/free_learning.pgf')
 
 
-plt.figure("Design Proposal", figsize=(4,3))
+plt.figure("Design Proposal", figsize=(3.5,2))
 for item in range(runs):
     plt.plot(GMI_dpcanc[item],c=color_list[3],linewidth=1 ,alpha=0.9)
 
-plt.plot(average_dpcanc, c=color_list[2], linewidth=2, label="division cancellation")
+plt.plot(average_dpcanc, c=color_list[2], linewidth=2)
 #plt.plot(average_dcanc1, c=color_list[6], linewidth=3, label="Enc"+str(1)+" division cancellation")
 
 plt.fill_between(np.arange(num_epochs), average_dpcanc+var_dpcanc,average_dpcanc-var_dpcanc, color=color_list[2], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_dcanc1+var_dcanc1,average_dcanc1-var_dcanc1, color=color_list[6], alpha=0.2)
 
 #plt.title("Training GMIs for Division cancellation")
-plt.legend(loc=4)
+#plt.legend(loc=4)
 #plt.yscale('log')
 plt.ylabel('GMI')
 plt.ylim(0,4)

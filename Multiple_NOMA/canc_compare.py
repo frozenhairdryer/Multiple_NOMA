@@ -68,10 +68,7 @@ for item in range(runs):
     g = gmi_exact.detach().cpu().numpy()
     GMI_nncanc.append(np.sum(g, axis=1))
     list_nncanc.append(ser)
-    if item==0:
-        best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
-        best_achieved='nn'
-    elif max(np.sum(g, axis=1))>max(best_impl[0]):
+    if max(np.sum(g, axis=1))>max(best_impl[0]):
         best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
         best_achieved='nn'
 

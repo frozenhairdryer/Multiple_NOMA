@@ -200,7 +200,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
         plt.ylim((-ext_max_plot,ext_max_plot))
         plt.xlabel(r'$\Re\{r\}$')
         plt.ylabel(r'$\Im\{r\}$')
-    plt.grid()
+        plt.grid()
     plt.tight_layout()
     #tikzplotlib.clean_figure()
     plt.savefig("Multiple_NOMA/figures/base_constellation.pdf")
