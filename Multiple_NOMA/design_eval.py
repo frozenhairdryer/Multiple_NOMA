@@ -11,7 +11,7 @@ num_epochs=60
 
 sigma_n=torch.tensor([0.09,0.09])
 M=torch.tensor([4,4])
-alph=torch.tensor([1,1/3*np.sqrt(2)])
+alph=torch.tensor([1,1/2*np.sqrt(2)])
 alph1=torch.tensor([1,1])
 #alph=[1,1]
 
@@ -42,7 +42,7 @@ list_dpcanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph, plotting=False)
+    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='nn', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_dpcanc.append(np.sum(g, axis=1))
     list_dpcanc.append(ser)
