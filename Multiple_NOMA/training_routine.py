@@ -289,7 +289,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                             decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](cancelled).detach()
                         else:
                             decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
-                            cancelled = (canc[dnum](cancelled[dnum-1],enc[len(M)-dnum-1](y_valid_onehot)))
+                            cancelled = (canc[dnum](cancelled,enc[len(M)-dnum-1](y_valid_onehot)))
 
 
             for num in range(len(M)):

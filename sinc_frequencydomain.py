@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 
-def pulse(k,n):
+def pulsesinc(k,n):
     f = np.linspace(-1,1,201)
     p = np.zeros(len(f))
     pm = np.zeros(len(f))
@@ -17,10 +17,28 @@ def pulse(k,n):
     #p = p/p[100]
     #pm = pm/pm[100]
     
-    f=np.linspace(-1.2,1.2,241)
-    p=np.pad(p,(20,20))
-    pm=np.pad(pm,(20,20))
+    f = np.linspace(-3,3,601)
+    p=np.pad(p,(200,200))
+    pm=np.pad(pm,(200,200))
     return p,pm,f
+
+def pulsegauss(k,n,a):
+    f = np.linspace(-3,3,601)
+    p = np.zeros(len(f))
+    pm = np.pi/a*np.exp(-2/a*(np.pi*f)**2)
+    for kx in k:
+        for nx in n:
+            p += np.pi/a*np.exp(-2/a*(np.pi*f)**2)*np.exp(-0.5*a*(kx-nx)**2)/len(k)
+    return p,pm,f
+
+def pulsrect(k,n):
+    f = np.linspace(-3,3,601)
+    p = np.zeros(len(f))
+    pm = np.sinc(f)**2
+    p = pm
+    return p,pm,f
+
+
 
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
@@ -41,12 +59,40 @@ n = np.linspace(-100,100,201)
 
 plt.figure(figsize=(5,3))
 
-psdx,psdmx,f = pulse(k,n)
+psdx,psdmx,f = pulsesinc(k,n)
 plt.plot(f,psdx,'--', color= color_list[0],label="signal with ISI")
 plt.plot(f,psdmx,'r',linewidth=2, label="ideal ISI-free signal")
-plt.xlabel('Frequency $f$')
+plt.xlabel('normalized Frequency $f$')
 plt.ylabel('PSD')
 plt.grid('--')
 plt.tight_layout()
 plt.legend(loc=1)
-plt.savefig("sincpulsefrey.pdf")
+plt.savefig("sincpulsefreq.pdf")
+
+
+plt.figure(figsize=(5,3))
+B = 1
+a = 5
+psdx,psdmx,f = pulsegauss(k,n,a)
+#psd,psdm,f = pulsegauss(k,n,20)
+plt.plot(f,psdx/max(psdmx),'--', color= color_list[0],label="signal with ISI")
+plt.plot(f,psdmx/max(psdmx),'r',linewidth=2, label="ideal ISI-free signal")
+
+plt.xlabel('normalized Frequency $f$')
+plt.ylabel('PSD')
+plt.grid('--')
+plt.tight_layout()
+plt.legend(loc=1)
+plt.savefig("gausspulsefreq.pdf")
+
+plt.figure(figsize=(5,3))
+
+psdx,psdmx,f = pulsrect(k,n)
+plt.plot(f,psdx,'--', color= color_list[0],label="signal with ISI")
+plt.plot(f,psdmx,'r',linewidth=2, label="ideal ISI-free signal")
+plt.xlabel('normalized Frequency $f$')
+plt.ylabel('PSD')
+plt.grid('--')
+plt.tight_layout()
+plt.legend(loc=1)
+plt.savefig("rectpulsefreq.pdf")

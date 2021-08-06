@@ -7,12 +7,12 @@ import pickle
 
 ### parameters
 runs = 50
-num_epochs=60
+num_epochs=150
 
-sigma_n=torch.tensor([0.09,0.09])
-M=torch.tensor([4,4])
-alph=torch.tensor([1,1/2*np.sqrt(2)])
-alph1=torch.tensor([1,1])
+sigma_n=torch.tensor([0.05,0.05,0.05])
+M=torch.tensor([4,4,4])
+alph=torch.tensor([1,1/2*np.sqrt(2),1/4*np.sqrt(2)])
+alph1=torch.tensor([1,1,1])
 #alph=[1,1]
 
 params=[runs,num_epochs,sigma_n,M,alph]

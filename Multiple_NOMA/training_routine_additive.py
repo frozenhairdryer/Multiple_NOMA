@@ -345,19 +345,17 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
         # store decision region of best implementation
         if canc_method=='none':
             for num in range(len(M)):
-                decision_region_evolution.append([])
                 mesh_prediction = (softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
-                decision_region_evolution[len(M)-num-1].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+                decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         elif canc_method=='diff':
             for num in range(len(M)):
-                decision_region_evolution.append([])
                 if num==0:
                     mesh_prediction = (softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
                     canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))-torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
                 else:
                     mesh_prediction = (softmax(dec_best[len(M)-num-1](canc_grid)))
                     canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)-torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
-                decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+                decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         else:
             mesh_prediction=[]
             for dnum in range(len(M)):
