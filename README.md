@@ -6,6 +6,15 @@ Implemented is a Neural network training a multiplicative modulation format:
 
 received = (mod1 + n_1)*mod2 + n_2
 
+Main Components are:
+  * Plotting of the PSD of different pulseshaping functions: sinc, rect, gauss
+  * Folder Multipl_NOMA:
+    * training_routine has function Multipl_NOMA which is described below
+    * training_routine_additive has an equivalent function but uses conventional NOMA, system is: received = (mod1+n_1)+(mod2+n_2)
+    * theoreticalMNOMA has the training of a decoder for the theoretical design proposal for a "16 QAM"
+    * canc_compare: in this script, the different cancellation methods are run successively and are compared
+    * design_eval: compares free learning with the design proposal
+    * other files have content which is used in Mulipl_NOMA etc.
 
 ## Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
 

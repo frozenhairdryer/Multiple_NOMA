@@ -51,7 +51,7 @@ class Decoder(nn.Module):
         #n1 = (x*(self.alpha+1)-torch.tensor([1,0])).float()
         out = self.activation_function(self.fcR1(x))
         out = self.activation_function(self.fcR2(out))
-        #out = self.activation_function(self.fcR3(out))
+        out = self.activation_function(self.fcR3(out))
         
         logits = self.activation_function(self.fcR5(out))
         #norm_factor=1

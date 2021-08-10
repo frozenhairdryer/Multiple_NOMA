@@ -87,7 +87,7 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure("No Cancellation", figsize=(4,3))
+plt.figure("No Cancellation", figsize=(3.5,3))
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -176,7 +176,7 @@ plt.tight_layout()
 plt.savefig('Multiple_NOMA/cancell_compare_GMI_Nocanc_bw_modradius.pgf')
 
 
-plt.figure("Division Cancellation", figsize=(4,3))
+plt.figure("Division Cancellation", figsize=(3.5,3))
 for item in range(runs):
     plt.plot(GMI_divcanc[item],c=color_list[3],linewidth=1 ,alpha=0.9)
 
@@ -196,7 +196,7 @@ plt.tight_layout()
 plt.savefig('Multiple_NOMA/cancell_compare_GMI_Divcanc_bw_modradius.pgf')
 
 
-plt.figure("NN Cancellation", figsize=(4,3)) #figsize=(3.5,2)
+plt.figure("NN Cancellation", figsize=(3.5,3)) #figsize=(3.5,2)
 for item in range(runs):
     plt.plot(GMI_nncanc[item],c=color_list[5],linewidth=1 ,alpha=0.9)
 plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")
