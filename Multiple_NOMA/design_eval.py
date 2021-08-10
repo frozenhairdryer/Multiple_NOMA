@@ -7,12 +7,12 @@ import pickle
 
 ### parameters
 runs = 50
-num_epochs=150
+num_epochs=100
 
-sigma_n=torch.tensor([0.05,0.05,0.05])
-M=torch.tensor([4,4,4])
-alph=torch.tensor([1,1/2*np.sqrt(2),1/4*np.sqrt(2)])
-alph1=torch.tensor([1,1,1])
+sigma_n=torch.tensor([0.08,0.08])
+M=torch.tensor([4,4])
+alph=torch.tensor([1,1/3*np.sqrt(2)])
+alph1=torch.tensor([1,1])
 #alph=[1,1]
 
 params=[runs,num_epochs,sigma_n,M,alph]
@@ -65,7 +65,7 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure("Free Learning", figsize=(3.5,2))
+plt.figure("Free Learning", figsize=(3.5,3))
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -77,7 +77,7 @@ for item in range(runs):
     #plt.plot(list_nncanc[item][0],c=color_list[9], alpha=0.9)
     #plt.plot(list_nncanc[item][1],c=color_list[11], alpha=0.9)
 
-    plt.plot(GMI_freecanc[item],c=color_list[1],linewidth=1, alpha=0.9)
+    plt.plot(GMI_freecanc[item],c=color_list[1],linewidth=1.5, alpha=0.9)
 
 
 
@@ -105,7 +105,7 @@ for item in range(runs):
 
 plt.plot(average_freecanc, c=color_list[0],linewidth=2)
 #plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
-plt.fill_between(np.arange(num_epochs), average_freecanc+var_freecanc,average_freecanc-var_freecanc, color=color_list[0], alpha=0.2)
+#plt.fill_between(np.arange(num_epochs), average_freecanc+var_freecanc,average_freecanc-var_freecanc, color=color_list[0], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nocanc1+var_nocanc1,average_nocanc1-var_nocanc1, color=color_list[2], alpha=0.2)
 
 #plt.title("Training GMIs without cancellation")
@@ -118,14 +118,14 @@ plt.tight_layout()
 plt.savefig('Multiple_NOMA/free_learning.pgf')
 
 
-plt.figure("Design Proposal", figsize=(3.5,2))
+plt.figure("Design Proposal", figsize=(3.5,3))
 for item in range(runs):
-    plt.plot(GMI_dpcanc[item],c=color_list[3],linewidth=1 ,alpha=0.9)
+    plt.plot(GMI_dpcanc[item],c=color_list[3],linewidth=1.5 ,alpha=0.9)
 
 plt.plot(average_dpcanc, c=color_list[2], linewidth=2)
 #plt.plot(average_dcanc1, c=color_list[6], linewidth=3, label="Enc"+str(1)+" division cancellation")
 
-plt.fill_between(np.arange(num_epochs), average_dpcanc+var_dpcanc,average_dpcanc-var_dpcanc, color=color_list[2], alpha=0.2)
+#plt.fill_between(np.arange(num_epochs), average_dpcanc+var_dpcanc,average_dpcanc-var_dpcanc, color=color_list[2], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_dcanc1+var_dcanc1,average_dcanc1-var_dcanc1, color=color_list[6], alpha=0.2)
 
 #plt.title("Training GMIs for Division cancellation")
@@ -135,9 +135,7 @@ plt.ylabel('GMI')
 plt.ylim(0,4)
 plt.grid()
 plt.tight_layout()
-plt.savefig('Multiple_NOMA/design_prop.pgf')
-
-
+plt.savefig('Multiple_NOMA/odesign_prop.pgf')
 
 
 plt.show()

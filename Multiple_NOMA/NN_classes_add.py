@@ -26,12 +26,9 @@ class Encoder(nn.Module):
         norm_factor = torch.max(torch.abs(torch.view_as_complex(encoded)).flatten())
         #if norm_factor>1:        
         #norm_factor = torch.sqrt(torch.mean(torch.mul(encoded,encoded)) * 2 ) # normalize mean amplitude in real and imag to sqrt(1/2)
-        modulated = encoded / norm_factor
+        modulated = torch.view_as_real((torch.view_as_complex(encoded) / norm_factor)*self.modradius)
         #else:
         #    modulated = encoded
-        if self.modradius!=1:
-            modulated = torch.view_as_real((1+self.modradius*torch.view_as_complex(modulated))/(torch.max(torch.abs(1+self.modradius*torch.view_as_complex(modulated)))))
-            #todo: fix nomralization of modradius
         return modulated
     
 
@@ -54,7 +51,7 @@ class Decoder(nn.Module):
         #n1 = (x*(self.alpha+1)-torch.tensor([1,0])).float()
         out = self.activation_function(self.fcR1(x))
         out = self.activation_function(self.fcR2(out))
-        out = self.activation_function(self.fcR3(out))
+        #out = self.activation_function(self.fcR3(out))
         
         logits = self.activation_function(self.fcR5(out))
         #norm_factor=1

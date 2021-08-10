@@ -130,7 +130,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 #    optimizer.add_param_group({'params':canc[const-1].parameters()})
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
                     optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=float(learn_rate)))
-        enc = enc[::-1]
+        #enc = enc[::-1]
             
 
 #optimizer.add_param_group({"params": h_est})
@@ -185,32 +185,32 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     
                     elif canc_method=='div':
                         for dnum in range(len(M)):
-                            batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[len(M)-dnum-1]), device=device)
-                            batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,len(M)-dnum-1].long()]=1
+                            batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[dnum]), device=device)
+                            batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,dnum].long()]=1
                             if dnum==0:
-                                decoded[len(M)-dnum-1]=(dec[len(M)-dnum-1](received))
+                                decoded[dnum]=(dec[dnum](received))
                                 #genie-aided:
-                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[len(M)-dnum-1](batch_labels_onehot).detach()).to(device))
-                                #cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1]))).detach()).to(device)
+                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[dnum](batch_labels_onehot).detach()).to(device))
+                                #cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[dnum](softmax(decoded[dnum]))).detach()).to(device)
                             else:
-                                decoded[len(M)-dnum-1]=(dec[len(M)-dnum-1](cancelled))
-                                #cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1]))).detach())
-                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                                decoded[dnum]=(dec[dnum](cancelled))
+                                #cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](softmax(decoded[dnum]))).detach())
+                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](batch_labels_onehot).detach()))
                     
                     elif canc_method=='nn':
                         for dnum in range(len(M)):
-                            batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[len(M)-dnum-1]), device=device)
-                            batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,len(M)-dnum-1].long()]=1
+                            batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[dnum]), device=device)
+                            batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,dnum].long()]=1
                             if dnum==0:
-                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](received)
-                                #cancelled =(canc[dnum](received,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
-                                cancelled = (canc[dnum](received,enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                                decoded[dnum]=dec[dnum](received)
+                                #cancelled =(canc[dnum](received,enc[dnum](softmax(decoded[dnum])).detach()))
+                                cancelled = (canc[dnum](received,enc[dnum](batch_labels_onehot).detach()))
                             elif dnum==len(M)-1:
-                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
+                                decoded[dnum]=dec[dnum](cancelled)
                             else:
-                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
-                                #cancelled =(canc[dnum](cancelled,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
-                                cancelled = (canc[dnum](cancelled,enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                                decoded[dnum]=dec[dnum](cancelled)
+                                #cancelled =(canc[dnum](cancelled,enc[dnum](softmax(decoded[dnum])).detach()))
+                                cancelled = (canc[dnum](cancelled,enc[dnum](batch_labels_onehot).detach()))
                             #decoded.register_hook(lambda grad: print(grad))
             # Calculate Loss
             for num in range(int(len(M))):
@@ -271,25 +271,26 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                             decoded_valid[dnum]=dec[dnum](channel)
                 if num==len(M)-1 and canc_method=='div':
                     for dnum in range(len(M)):
-                        y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,len(M)-dnum-1]]
+                        y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,dnum]]
                         if dnum==0:
-                            decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](channel)
-                            cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[len(M)-dnum-1](y_valid_onehot)))
+                            decoded_valid[dnum]=dec[dnum](channel)
+                            cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[dnum](y_valid_onehot)))
                         else:
-                            decoded_valid[len(M)-dnum-1]=(dec[len(M)-dnum-1](cancelled))
-                            cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[len(M)-dnum-1](y_valid_onehot)))
+                            decoded_valid[dnum]=(dec[dnum](cancelled))
+                            cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](y_valid_onehot)))
                 if num==len(M)-1 and canc_method=='nn':
                     #cancelled=[]
                     for dnum in range(len(M)):
+                        y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,dnum]]
                         if dnum==0:
-                            decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](channel).detach()
+                            decoded_valid[dnum]=dec[dnum](channel).detach()
                             # canceller
-                            cancelled = (canc[dnum](channel,enc[int(len(M))-dnum-1](y_valid_onehot)))
+                            cancelled = (canc[dnum](channel,enc[dnum](y_valid_onehot)))
                         elif dnum==len(M)-1:
-                            decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](cancelled).detach()
+                            decoded_valid[dnum]=dec[dnum](cancelled).detach()
                         else:
-                            decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
-                            cancelled = (canc[dnum](cancelled,enc[len(M)-dnum-1](y_valid_onehot)))
+                            decoded_valid[dnum]=dec[dnum](cancelled)
+                            cancelled = (canc[dnum](cancelled,enc[dnum](y_valid_onehot)))
 
 
             for num in range(len(M)):
@@ -344,34 +345,30 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         # store decision region of best implementation
         if canc_method=='none':
             for num in range(len(M)):
-                decision_region_evolution.append([])
                 mesh_prediction = (softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
-                decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+                decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         elif canc_method=='div':
             for num in range(len(M)):
-                decision_region_evolution.append([])
+                #decision_region_evolution.append([])
                 if num==0:
-                    mesh_prediction = (softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
-                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
+                    mesh_prediction = (softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[num](mesh_prediction)))
                 else:
-                    mesh_prediction = (softmax(dec_best[len(M)-num-1](canc_grid)))
-                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
-                decision_region_evolution[num].append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+                    mesh_prediction = (softmax(dec_best[num](canc_grid)))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[num](mesh_prediction)))
+                decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         else:
-            mesh_prediction=[]
-            for dnum in range(len(M)):
-                mesh_prediction.append([])
             for dnum in range(len(M)):
                 if dnum==0:
-                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](torch.Tensor(meshgrid).to(device))
-                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1]((softmax(mesh_prediction[len(M)-dnum-1]))))
+                    mesh_prediction=dec_best[dnum](torch.Tensor(meshgrid).to(device))
+                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[dnum](softmax(mesh_prediction)))
                 elif dnum==len(M)-1:
-                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
+                    mesh_prediction=dec_best[dnum](cancelled)
                 else:
-                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
-                    cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1]((softmax(mesh_prediction[len(M)-dnum-1])))))
-                decision_region_evolution.append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
-        decision_region_evolution = decision_region_evolution[::-1] 
+                    mesh_prediction=dec_best[dnum](cancelled)
+                    cancelled=(canc_best[dnum](cancelled,enc_best[dnum]((softmax(mesh_prediction)))))
+                decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() +0.4)
+        #decision_region_evolution = decision_region_evolution[::-1] 
             
     print('Training finished')
     if plotting==True:

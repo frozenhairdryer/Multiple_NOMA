@@ -94,8 +94,8 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     #tikzplotlib.save("figures/SERs.tex", strict=True, externalize_tables=True, override_externals=True)
 
     plt.figure("GMIs",figsize=(3,2.5))
-    plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
-    plt.plot(gmi_hd,linestyle='--',label='GMI Hard decision')
+    #plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
+    #plt.plot(gmi_hd,linestyle='--',label='GMI Hard decision')
     #plt.plot(max_GMI,GMIs_appr[max_GMI],c='red')
     for num in range(len(gmi_exact[0,:])):
         if num==0:

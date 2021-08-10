@@ -45,7 +45,7 @@ for item in range(runs):
         var_nncanc+=(GMI_nncanc[item]-average_nncanc)**2/runs 
 
 #print(datetime.datetime.now() - begin_time)                                     
-plt.figure("NN Cancellation", figsize=(3.5,2))
+plt.figure("NN Cancellation", figsize=(3,3))
 for item in range(runs):
     plt.plot(GMI_nncanc[item],c=color_list[5],linewidth=0.5 ,alpha=0.9)
 plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")

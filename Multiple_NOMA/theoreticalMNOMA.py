@@ -1,9 +1,25 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
 from imports import *
 from functions import *
-from NN_classes_add import *
+from NN_classes import *
 
+class TEncoder(nn.Module):
+    def __init__(self,M, mradius):
+        super(TEncoder, self).__init__()
+        self.M = torch.as_tensor(M, device='cuda')
+        self.modradius= mradius 
+        if mradius==1:
+            self.mapping = 1/np.sqrt(2)*torch.tensor([1+1j,1-1j,-1+1j,-1-1j], device=device)
+        else:
+            self.mapping = (1+mradius*torch.tensor([1,-1j,1j,-1], device=device))/(1+mradius)
 
-def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
+    def forward(self, x):
+        modulated = torch.view_as_real(self.mapping[x.long()])
+        return modulated
+
+def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
     # train_params=[num_epochs,batches_per_epoch, learn_rate]
     # canc_method is the chosen cancellation method:
     # division cancellation: canc_method='div'
@@ -39,7 +55,8 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
 
         if canc_method=='none' or canc_method=='div':
             for const in range(len(M)):
-                enc.append(Encoder(M[const], modradius[const]))
+                #enc.append(Encoder(M[const], modradius[const]))
+                enc.append(TEncoder(M[const],modradius[const]))
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
                 # Adam Optimizer
@@ -50,7 +67,7 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 #    optimizer.add_param_group({'params':enc[const].parameters()})
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
                 optimizer.append([])
-                optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)))
+                #optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)))
                 optimizer[const].append(optim.Adam(dec[const].parameters(), lr=float(learn_rate)))
 
                 
@@ -58,7 +75,7 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
         elif canc_method=='nn':
             canc = nn.ModuleList().to(device)
             for const in range(len(M)):
-                enc.append(Encoder(M[const],modradius[const]))
+                enc.append(TEncoder(M[const],modradius[const]))
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
                 # Adam Optimizer
@@ -66,7 +83,7 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 #if const==0:
                 #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
-                optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)))
+                #optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)))
                 optimizer[const].append(optim.Adam(dec[const].parameters(),lr=float(learn_rate)))
                 if const>0:
                     canc.append(Canceller(torch.prod(M)))
@@ -74,60 +91,12 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 #    optimizer.add_param_group({'params':canc[const-1].parameters()})
                 #    optimizer.add_param_group({'params':dec[const].parameters()})
                     optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=float(learn_rate)))
-            
-    else:
-        enc=encoder
-        #dec=torch.empty(len(M),device=device)
-        dec=nn.ModuleList().to(device)
-        optimizer=[]
-        lhelp=len(encoder)
-
-        if canc_method=='none' or canc_method=='div':
-            for const in range(len(M)):
-                optimizer.append([])
-                if const>=lhelp:
-                    enc.append(Encoder(M[const], modradius[const]))
-                dec.append(Decoder(M[const]))
-                enc[const].to(device)
-                # Adam Optimizer
-                #if const==0:
-                #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
-                #    optimizer.add_param_group({'params':dec[const].parameters()})
-                #else:
-                #    optimizer.add_param_group({'params':enc[const].parameters()})
-                #    optimizer.add_param_group({'params':dec[const].parameters()})
-                if const<lhelp:
-                    print("skip encoder optim for enc" + str(const))
-                    #pass
-                    optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)*0.01))
-                else:
-                    optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)))
-                optimizer[const].append(optim.Adam(dec[const].parameters(), lr=float(learn_rate)))
-                
-        
-        elif canc_method=='nn':
-            canc = []
-            for const in range(len(M)):
-                dec.append(Decoder(M[const]))
-                
-                # Adam Optimizer
-                optimizer.append([])
-                if const<lhelp:
-                    optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)*0.01))
-                else:
-                    enc.append(Encoder(M[const],modradius[const]))
-                    optimizer[const].append(optim.Adam(enc[const].parameters(),lr=float(learn_rate)))
-                optimizer[const].append(optim.Adam(dec[const].parameters(),lr=float(learn_rate)))
-                enc[const].to(device)
-                if const>0:
-                    canc.append(Canceller(torch.prod(M)))
-                    optimizer[const].append(optim.Adam(canc[const-1].parameters(),lr=float(learn_rate)))
-        enc = enc[::-1]
+        #enc = enc[::-1]
             
 
 #optimizer.add_param_group({"params": h_est})
 
-    if canc_method!='nn' and canc_method!='none' and canc_method!='diff':
+    if canc_method!='nn' and canc_method!='none' and canc_method!='div':
         raise error("Cancellation method invalid. Choose 'none','nn', or 'div'")
 
     softmax = nn.Softmax(dim=1).to(device)
@@ -158,17 +127,16 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
             
             for num in range(len(M)):        
                 batch_labels[:,num].random_(int(M[num]))
-                batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[num]), device=device)
+                batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[num]), dtype=torch.long,device=device)
                 batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,num].long()]=1
     
                 if num==0:
                     # Propagate (training) data through the first transmitter
-                    modulated = enc[0](batch_labels_onehot).to(device)
+                    modulated = enc[0](batch_labels[:,num])
                     # Propagate through channel 1
                     received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 else:
-                    modulated = enc[num](batch_labels_onehot).to(device)
-                    modulated += torch.view_as_real((torch.view_as_complex(received)))
+                    modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels[:,num])))))
                     received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
                 if num==len(M)-1:
@@ -176,34 +144,34 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                         for dnum in range(len(M)):
                             decoded[dnum]=(dec[dnum](received))
                     
-                    elif canc_method=='diff':
+                    elif canc_method=='div':
                         for dnum in range(len(M)):
                             batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[len(M)-dnum-1]), device=device)
                             batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,len(M)-dnum-1].long()]=1
                             if dnum==0:
-                                decoded[len(M)-dnum-1]=(dec[len(M)-dnum-1](received))
+                                decoded[dnum]=(dec[dnum](received))
                                 #genie-aided:
-                                cancelled = torch.view_as_real(torch.view_as_complex(received)-torch.view_as_complex(enc[len(M)-dnum-1](batch_labels_onehot).detach()).to(device))
+                                cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[dnum](batch_labels[:,num]).detach()).to(device))
                                 #cancelled = torch.view_as_real(torch.view_as_complex(received)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1]))).detach()).to(device)
                             else:
-                                decoded[len(M)-dnum-1]=(dec[len(M)-dnum-1](cancelled))
+                                decoded[dnum]=(dec[dnum](cancelled))
                                 #cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1]))).detach())
-                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)-torch.view_as_complex(enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                                cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](batch_labels[:,num]).detach()))
                     
                     elif canc_method=='nn':
                         for dnum in range(len(M)):
-                            batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[len(M)-dnum-1]), device=device)
-                            batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,len(M)-dnum-1].long()]=1
+                            batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[dnum]), device=device)
+                            batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,dnum-1].long()]=1
                             if dnum==0:
-                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](received)
+                                decoded[dnum]=dec[dnum](received)
                                 #cancelled =(canc[dnum](received,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
-                                cancelled = (canc[dnum](received,enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                                cancelled = (canc[dnum](received,enc[dnum](batch_labels[:,dnum]).detach()))
                             elif dnum==len(M)-1:
-                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
+                                decoded[dnum]=dec[dnum](cancelled)
                             else:
-                                decoded[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
+                                decoded[dnum]=dec[dnum](cancelled)
                                 #cancelled =(canc[dnum](cancelled,enc[len(M)-dnum-1](softmax(decoded[len(M)-dnum-1])).detach()))
-                                cancelled = (canc[dnum](cancelled,enc[len(M)-dnum-1](batch_labels_onehot).detach()))
+                                cancelled = (canc[dnum](cancelled,enc[dnum](batch_labels[:,dnum]).detach()))
                             #decoded.register_hook(lambda grad: print(grad))
             # Calculate Loss
             for num in range(int(len(M))):
@@ -246,14 +214,14 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,num]]
                 
                 if num==0:
-                    encoded = (enc[num](y_valid_onehot)).to(device)
+                    encoded = enc[num](y_valid[:,num]).to(device)
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[0]))
                     channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     # color map for plot
                     if plotting==True:
                         cvalid=y_valid[:,num]
                 else:
-                    encoded = torch.view_as_real((torch.view_as_complex(channel)+(torch.view_as_complex(enc[num](y_valid_onehot)))))
+                    encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](y_valid[:,num]))))
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[num]))
                     channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     #color map for plot
@@ -262,27 +230,27 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 if num==len(M)-1 and canc_method=='none':
                         for dnum in range(len(M)):
                             decoded_valid[dnum]=dec[dnum](channel)
-                if num==len(M)-1 and canc_method=='diff':
+                if num==len(M)-1 and canc_method=='div':
                     for dnum in range(len(M)):
                         y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,len(M)-dnum-1]]
                         if dnum==0:
-                            decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](channel)
-                            cancelled = torch.view_as_real(torch.view_as_complex(channel)-torch.view_as_complex(enc[len(M)-dnum-1](y_valid_onehot)))
+                            decoded_valid[dnum]=dec[dnum](channel)
+                            cancelled = torch.view_as_real(torch.view_as_complex(channel)/torch.view_as_complex(enc[dnum](y_valid[:,dnum])))
                         else:
-                            decoded_valid[len(M)-dnum-1]=(dec[len(M)-dnum-1](cancelled))
-                            cancelled = torch.view_as_real(torch.view_as_complex(cancelled)-torch.view_as_complex(enc[len(M)-dnum-1](y_valid_onehot)))
+                            decoded_valid[dnum]=(dec[dnum](cancelled))
+                            cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](y_valid[:,dnum])))
                 if num==len(M)-1 and canc_method=='nn':
                     #cancelled=[]
                     for dnum in range(len(M)):
                         if dnum==0:
-                            decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](channel).detach()
+                            decoded_valid[dnum]=dec[dnum](channel).detach()
                             # canceller
-                            cancelled = (canc[dnum](channel,enc[int(len(M))-dnum-1](y_valid_onehot)))
+                            cancelled = (canc[dnum](channel,enc[dnum](y_valid[:,dnum])))
                         elif dnum==len(M)-1:
-                            decoded_valid[int(len(M))-dnum-1]=dec[int(len(M))-dnum-1](cancelled).detach()
+                            decoded_valid[dnum]=dec[dnum](cancelled).detach()
                         else:
-                            decoded_valid[len(M)-dnum-1]=dec[len(M)-dnum-1](cancelled)
-                            cancelled = (canc[dnum](cancelled[dnum-1],enc[len(M)-dnum-1](y_valid_onehot)))
+                            decoded_valid[dnum]=dec[dnum](cancelled)
+                            cancelled = (canc[dnum](cancelled,enc[dnum](y_valid[:,dnum])))
 
 
             for num in range(len(M)):
@@ -327,50 +295,43 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
         # constellations only used for plotting
         constellation_base = []
         for num in range(len(M)):
-            t = (torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device)))).cpu().detach().numpy()
-            constellation_base.append(t)
-
+            tx = torch.view_as_complex(enc_best[num](torch.linspace(0,int(M[num]-1),int(M[num]))))
+            constellation_base.append(tx.cpu().detach().numpy())
         
         constellations = cp.asarray(constellation_base[0])
         for num in range(len(M)-1):
-            cx=cp.zeros((int(M[num+1]),int(M[num])), dtype=complex)
-            if num>0:
-                cx = cp.zeros((int(M[num]),int(len(constellations))), dtype=complex)
-            for item in range(len(constellations)):
-                cx[:,item]=constellations[item]+cp.asarray(constellation_base[num+1])
-            constellations = cp.asarray(cx).flatten()
-        constellations = constellations/cp.max(cp.abs(constellations))
-
+            constellationsplus = cp.asarray(constellation_base[num+1])
+            constellations = cp.kron(constellations,constellationsplus)
     
         # store decision region of best implementation
         if canc_method=='none':
             for num in range(len(M)):
-                mesh_prediction = (softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
+                mesh_prediction = (torch.argmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
                 decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
-        elif canc_method=='diff':
+        elif canc_method=='div':
             for num in range(len(M)):
                 if num==0:
-                    mesh_prediction = (softmax(dec_best[len(M)-num-1](torch.Tensor(meshgrid).to(device))))
-                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))-torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
+                    mesh_prediction = (torch.argmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[num](mesh_prediction)))
                 else:
-                    mesh_prediction = (softmax(dec_best[len(M)-num-1](canc_grid)))
-                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)-torch.view_as_complex(enc[len(M)-num-1](mesh_prediction)))
+                    mesh_prediction = (torch.argmax(dec_best[num](canc_grid)))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[num](mesh_prediction)))
                 decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
+        
+        
         else:
-            mesh_prediction=[]
-            for dnum in range(len(M)):
-                mesh_prediction.append([])
             for dnum in range(len(M)):
                 if dnum==0:
-                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](torch.Tensor(meshgrid).to(device))
-                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[len(M)-dnum-1]((softmax(mesh_prediction[len(M)-dnum-1]))))
+                    mesh_prediction=(dec_best[dnum](torch.Tensor(meshgrid).to(device)))
+                    cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[dnum](torch.argmax(mesh_prediction, axis=1)))
                 elif dnum==len(M)-1:
-                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
+                    mesh_prediction=(dec_best[dnum](cancelled))
                 else:
-                    mesh_prediction[len(M)-dnum-1]=dec_best[len(M)-dnum-1](cancelled)
-                    cancelled=(canc_best[dnum](cancelled,enc_best[len(M)-dnum-1]((softmax(mesh_prediction[len(M)-dnum-1])))))
-                decision_region_evolution.append(0.195*mesh_prediction[len(M)-dnum-1].detach().cpu().numpy() +0.4)
-        decision_region_evolution = decision_region_evolution[::-1] 
+                    mesh_prediction=(dec_best[dnum](cancelled))
+                    cancelled=canc_best[dnum](cancelled,enc_best[dnum](torch.argmax(mesh_prediction, axis=1)))
+                decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() +0.4)
+        #decision_region_evolution = decision_region_evolution[::-1] 
+
             
     print('Training finished')
     if plotting==True:
@@ -379,3 +340,9 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
         return(canc_method,enc_best,dec_best,canc_best, gmi, validation_SERs,gmi_exact)
     else:
         return(canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact)
+
+
+
+M=torch.tensor([4,4], dtype=int)
+sigma_n=torch.tensor([0.08,0.08], dtype=float)
+t_Multipl_NOMA(M,sigma_n,train_params=cp.array([50,400,0.002]),canc_method='nn', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
