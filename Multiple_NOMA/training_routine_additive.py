@@ -37,7 +37,7 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
         dec=nn.ModuleList().to(device)
         optimizer=[]
 
-        if canc_method=='none' or canc_method=='div':
+        if canc_method=='none' or canc_method=='diff':
             for const in range(len(M)):
                 enc.append(Encoder(M[const], modradius[const]))
                 dec.append(Decoder(M[const]))
@@ -82,7 +82,7 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
         optimizer=[]
         lhelp=len(encoder)
 
-        if canc_method=='none' or canc_method=='div':
+        if canc_method=='none' or canc_method=='diff':
             for const in range(len(M)):
                 optimizer.append([])
                 if const>=lhelp:

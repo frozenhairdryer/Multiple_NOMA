@@ -9,7 +9,7 @@ import pickle
 runs = 50
 num_epochs=100
 
-sigma_n=torch.tensor([0.08,0.08])
+sigma_n=torch.tensor([0.09,0.09])
 M=torch.tensor([4,4])
 alph=torch.tensor([1,1/3*np.sqrt(2)])
 alph1=torch.tensor([1,1])
@@ -25,15 +25,15 @@ list_freecanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph1, plotting=False)
+    _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='div', modradius=alph1, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_freecanc.append(np.sum(g, axis=1))
     list_freecanc.append(ser)
     if item==0:
-        best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
+        best_impl=[np.sum(g, axis=1),en, dec, ser]
         best_achieved='nn'
     elif max(np.sum(g, axis=1))>max(best_impl[0]):
-        best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
+        best_impl=[np.sum(g, axis=1),en, dec, ser]
         best_achieved='free'
 
 GMI_dpcanc=[]
@@ -42,12 +42,12 @@ list_dpcanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='nn', modradius=alph, plotting=False)
+    _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='div', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_dpcanc.append(np.sum(g, axis=1))
     list_dpcanc.append(ser)
     if max(np.sum(g, axis=1))>max(best_impl[0]):
-        best_impl=[np.sum(g, axis=1),en, dec, canc, ser]
+        best_impl=[np.sum(g, axis=1),en, dec, ser]
         best_achieved='dp'
 
 ## save all data if further processing is wanted
@@ -65,7 +65,7 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure("Free Learning", figsize=(3.5,3))
+plt.figure("Free Learning", figsize=(3,3))
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -118,7 +118,7 @@ plt.tight_layout()
 plt.savefig('Multiple_NOMA/free_learning.pgf')
 
 
-plt.figure("Design Proposal", figsize=(3.5,3))
+plt.figure("Design Proposal", figsize=(3,3))
 for item in range(runs):
     plt.plot(GMI_dpcanc[item],c=color_list[3],linewidth=1.5 ,alpha=0.9)
 

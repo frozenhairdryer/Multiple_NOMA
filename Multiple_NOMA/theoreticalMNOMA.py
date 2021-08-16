@@ -311,11 +311,11 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
         elif canc_method=='div':
             for num in range(len(M)):
                 if num==0:
-                    mesh_prediction = (torch.argmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
-                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[num](mesh_prediction)))
+                    mesh_prediction = (dec_best[num](torch.Tensor(meshgrid).to(device)))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(torch.Tensor(meshgrid).to(device))/torch.view_as_complex(enc[num](torch.argmax(mesh_prediction))))
                 else:
-                    mesh_prediction = (torch.argmax(dec_best[num](canc_grid)))
-                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[num](mesh_prediction)))
+                    mesh_prediction = (dec_best[num](canc_grid))
+                    canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[num](torch.argmax(mesh_prediction))))
                 decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         
         
@@ -345,4 +345,4 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
 
 M=torch.tensor([4,4], dtype=int)
 sigma_n=torch.tensor([0.08,0.08], dtype=float)
-t_Multipl_NOMA(M,sigma_n,train_params=cp.array([50,400,0.002]),canc_method='nn', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
+t_Multipl_NOMA(M,sigma_n,train_params=cp.array([100,300,0.002]),canc_method='nn', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)

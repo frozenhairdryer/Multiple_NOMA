@@ -11,8 +11,8 @@ num_epochs=60
 
 sigma_n=torch.tensor([0.09,0.09])
 M=torch.tensor([4,4])
-alph=torch.tensor([1,1/3*np.sqrt(2)])
-#alph=[1,1]
+#alph=torch.tensor([1,1/3*np.sqrt(2)])
+alph=torch.tensor([1,1])
 
 params=[runs,num_epochs,sigma_n,M,alph]
 
@@ -21,7 +21,7 @@ GMI_nocanc=[]
 list_nocanc=[]
 #compare_data.append([])
 for item in range(runs):
-    _,en, dec, gmi, ser, gmi_exact =Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.007],canc_method='none', modradius=alph, plotting=False)
+    _,en, dec, gmi, ser, gmi_exact =Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='none', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_nocanc.append(np.sum(g, axis=1))
     list_nocanc.append(ser)
@@ -60,7 +60,7 @@ for item in range(runs):
 ## NN canceller 
 GMI_nncanc=[]
 list_nncanc=[]
-#compare_data.append([])
+compare_data.append([])
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
@@ -73,10 +73,8 @@ for item in range(runs):
         best_achieved='nn'
 
 ## save all data if further processing is wanted
-with open('Multiple_NOMA/best_impl_gmiexact_compplot_bw.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-    pickle.dump([best_impl, best_achieved, params], f)
-with open('Multiple_NOMA/cancel_compare_gmiexact_compplot_bw.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-    pickle.dump([list_nocanc,list_divcanc,list_nncanc, best_impl, best_achieved, params], f)
+with open('Multiple_NOMA/cancel_compare_gmiexact_freecanc_bw.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+    pickle.dump([GMI_nocanc,GMI_divcanc,GMI_nncanc, best_impl, best_achieved, params], f)
 print("Best implementation achieved with "+best_achieved+" cancellation.")
 
 ## figures
@@ -87,7 +85,7 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure("No Cancellation", figsize=(3.5,3))
+plt.figure("No Cancellation", figsize=(3,3))
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -173,10 +171,10 @@ plt.ylabel('GMI')
 plt.grid()
 plt.ylim(0,4)
 plt.tight_layout()
-plt.savefig('Multiple_NOMA/cancell_compare_GMI_Nocanc_bw_modradius.pgf')
+plt.savefig('Multiple_NOMA/cancell_compare_GMI_Nocanc_bw.pgf')
 
 
-plt.figure("Division Cancellation", figsize=(3.5,3))
+plt.figure("Division Cancellation", figsize=(3,3))
 for item in range(runs):
     plt.plot(GMI_divcanc[item],c=color_list[3],linewidth=1 ,alpha=0.9)
 
@@ -193,10 +191,10 @@ plt.ylabel('GMI')
 plt.ylim(0,4)
 plt.grid()
 plt.tight_layout()
-plt.savefig('Multiple_NOMA/cancell_compare_GMI_Divcanc_bw_modradius.pgf')
+plt.savefig('Multiple_NOMA/cancell_compare_GMI_Divcanc_bw.pgf')
 
 
-plt.figure("NN Cancellation", figsize=(3.5,3)) #figsize=(3.5,2)
+plt.figure("NN Cancellation", figsize=(3,3)) #figsize=(3.5,2)
 for item in range(runs):
     plt.plot(GMI_nncanc[item],c=color_list[5],linewidth=1 ,alpha=0.9)
 plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")
@@ -211,7 +209,7 @@ plt.ylabel('GMI')
 plt.grid()
 plt.ylim(0,4)
 plt.tight_layout()
-plt.savefig('Multiple_NOMA/cancell_compare_GMI_NNlogcanc_bw_modradius.pgf')
+plt.savefig('Multiple_NOMA/cancell_compare_GMI_NNlogcanc_bw.pgf')
 
 plt.show()
 
