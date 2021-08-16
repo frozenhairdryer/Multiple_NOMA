@@ -16,8 +16,6 @@ class Encoder(nn.Module):
         self.activation_function = nn.ELU()      
 
     def forward(self, x):
-        if self.M==1: # dummy user
-            return torch.tensor([1,1], dtype=torch.float64,device=device)
         # compute output
         out = self.activation_function(self.fcT1(x))
         out = self.activation_function(self.fcT2(out))

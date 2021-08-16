@@ -19,7 +19,11 @@ def BER(predictions, labels,m):
 def GMI_est(SERs, M, ber=None):
     # gmi estimate 1 or both estimates, if bers are given
     gmi_est=0
-    for mod in range(len(M)):
+    if M.any()==1:
+        length=1
+    else:
+        length=len(M)
+    for mod in range(length):
         Pe = torch.min(SERs[mod],torch.tensor(0.5)) # all bit are simultaneously wrong
         gmi_est += torch.log2(M[mod])*(1+Pe*torch.log2(Pe+1e-12)+(1-Pe)*torch.log2((1-Pe)+1e-12))
     if ber!=None:
@@ -70,7 +74,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
 
     sum_SERs = np.sum(SERs, axis=0)/len(M)
     min_SER_iter = np.argmin(cp.sum(SERs,axis=0))
-    max_GMI = np.argmax(GMIs_appr.detach().cpu().numpy())
+    max_GMI = np.argmax(np.sum(gmi_exact, axis=1))
     ext_max_plot = 1.2*np.max(np.abs(valid_r[int(min_SER_iter)]))
 
     print('Minimum mean SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(SERs[0])))

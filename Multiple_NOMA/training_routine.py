@@ -11,19 +11,25 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     # cancellation with neural network: canc_method='nn'
     # modradius is the permitted signal amplitude for each encoder
     # M, sigma_n, modradius are lists of the same size
-    if len(M)!=len(sigma_n) or len(M)!=len(modradius):
+    if M.size()!=sigma_n.size() or M.size()!=modradius.size():
         raise error("M, sigma_n, modradius need to be of same size!")
     
     num_epochs=train_params[0]
     batches_per_epoch=train_params[1]
     learn_rate =train_params[2]
     N_valid=10000
-    weight=torch.ones(len(M))
+    
     printing=False #suppresses all pinted output but GMI
+    length = np.size(M.detach().cpu().numpy())
+    if length==1:
+        M = torch.tensor([M,1])
+        modradius = torch.tensor([modradius,0])
+        sigma_n = torch.tensor([sigma_n,0])
+    weight=torch.ones(length)
 
     # Generate Validation Data
-    y_valid = torch.zeros((N_valid,len(M)),dtype=int, device=device)
-    for vnum in range(len(M)):
+    y_valid = torch.zeros((N_valid,length),dtype=int, device=device)
+    for vnum in range(length):
         y_valid[:,vnum]= torch.randint(0,M[vnum],(N_valid,))
 
     if plotting==True:
@@ -38,7 +44,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         optimizer=[]
 
         if canc_method=='none' or canc_method=='div':
-            for const in range(len(M)):
+            for const in range(length):
                 enc.append(Encoder(M[const], modradius[const]))
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
@@ -57,7 +63,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         
         elif canc_method=='nn':
             canc = nn.ModuleList().to(device)
-            for const in range(len(M)):
+            for const in range(length):
                 enc.append(Encoder(M[const],modradius[const]))
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
@@ -77,13 +83,13 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             
     else:
         enc=encoder
-        #dec=torch.empty(len(M),device=device)
+        #dec=torch.empty(length,device=device)
         dec=nn.ModuleList().to(device)
         optimizer=[]
         lhelp=len(encoder)
 
         if canc_method=='none' or canc_method=='div':
-            for const in range(len(M)):
+            for const in range(length):
                 optimizer.append([])
                 if const>=lhelp:
                     enc.append(Encoder(M[const], modradius[const]))
@@ -107,7 +113,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         
         elif canc_method=='nn':
             canc = []
-            for const in range(len(M)):
+            for const in range(length):
                 #enc.append(Encoder(M[const],modradius[const]))
                 #dec[const]=(Decoder(M[const]))
                 dec.append(Decoder(M[const]))
@@ -147,7 +153,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     batch_size_per_epoch = cp.linspace(100,10000,int(num_epochs))
 
     validation_BER = []
-    validation_SERs = torch.zeros((len(M),int(num_epochs)))
+    validation_SERs = torch.zeros((length,int(num_epochs)))
     validation_received = []
     
     print('Start Training')
@@ -157,14 +163,14 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     gmi_exact = torch.zeros((int(num_epochs), bitnumber), device=device)
 
     for epoch in range(int(num_epochs)):
-        batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),len(M),dtype=torch.long, device=device)
+        batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),length,dtype=torch.long, device=device)
         validation_BER.append([])
         for step in range(int(batches_per_epoch)):
             # Generate training data: In most cases, you have a dataset and do not generate a training dataset during training loop
             # sample new mini-batch directory on the GPU (if available)
-            decoded=torch.zeros((int(len(M)),int(batch_size_per_epoch[epoch]),(torch.max(M))), device=device)
+            decoded=torch.zeros((int(length),int(batch_size_per_epoch[epoch]),(torch.max(M))), device=device)
             
-            for num in range(len(M)):        
+            for num in range(length):        
                 batch_labels[:,num].random_(int(M[num]))
                 batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[num]), device=device)
                 batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,num].long()]=1
@@ -178,13 +184,13 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels_onehot)))))
                     received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
-                if num==len(M)-1:
+                if num==length-1:
                     if canc_method=='none':
-                        for dnum in range(len(M)):
+                        for dnum in range(length):
                             decoded[dnum]=(dec[dnum](received))
                     
                     elif canc_method=='div':
-                        for dnum in range(len(M)):
+                        for dnum in range(length):
                             batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[dnum]), device=device)
                             batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,dnum].long()]=1
                             if dnum==0:
@@ -198,14 +204,14 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                                 cancelled =  torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](batch_labels_onehot).detach()))
                     
                     elif canc_method=='nn':
-                        for dnum in range(len(M)):
+                        for dnum in range(length):
                             batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[dnum]), device=device)
                             batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,dnum].long()]=1
                             if dnum==0:
                                 decoded[dnum]=dec[dnum](received)
                                 #cancelled =(canc[dnum](received,enc[dnum](softmax(decoded[dnum])).detach()))
                                 cancelled = (canc[dnum](received,enc[dnum](batch_labels_onehot).detach()))
-                            elif dnum==len(M)-1:
+                            elif dnum==length-1:
                                 decoded[dnum]=dec[dnum](cancelled)
                             else:
                                 decoded[dnum]=dec[dnum](cancelled)
@@ -213,9 +219,9 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                                 cancelled = (canc[dnum](cancelled,enc[dnum](batch_labels_onehot).detach()))
                             #decoded.register_hook(lambda grad: print(grad))
             # Calculate Loss
-            for num in range(int(len(M))):
+            for num in range(int(length)):
                 #b = BER(softmax(decoded[num]), batch_labels[:,num],M[num])
-            #num=cp.mod(epoch,len(M))
+            #num=cp.mod(epoch,length)
             # calculate loss as weighted addition of losses for each enc[x] to dec[x] path
                 if num==0:
                     #loss = 3*weight[0]*cBCEloss(decoded[0], batch_labels[:,0].long(),M[num])
@@ -232,13 +238,13 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             loss.backward()
 
             # run optimizer
-            for const in range(len(M)):
+            for const in range(length):
                 for elem in optimizer[const]:
                     elem.step()
             
 
             # reset gradients
-            for const in range(len(M)):    
+            for const in range(length):    
                 for elem in optimizer[const]:
                     elem.zero_grad()
 
@@ -247,9 +253,9 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             # compute validation SER, SNR, GMI
             if plotting==True:
                 cvalid = torch.zeros(N_valid)
-            decoded_valid=torch.zeros((int(len(M)),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
-            SNR = torch.zeros(int(len(M)), device=device)
-            for num in range(len(M)):
+            decoded_valid=torch.zeros((int(length),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
+            SNR = torch.zeros(int(length), device=device)
+            for num in range(length):
                 y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,num]]
                 
                 if num==0:
@@ -266,11 +272,11 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     #color map for plot
                     if plotting==True:
                         cvalid= cvalid+int(M[num])*y_valid[:,num]
-                if num==len(M)-1 and canc_method=='none':
-                        for dnum in range(len(M)):
+                if num==length-1 and canc_method=='none':
+                        for dnum in range(length):
                             decoded_valid[dnum]=dec[dnum](channel)
-                if num==len(M)-1 and canc_method=='div':
-                    for dnum in range(len(M)):
+                if num==length-1 and canc_method=='div':
+                    for dnum in range(length):
                         y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,dnum]]
                         if dnum==0:
                             decoded_valid[dnum]=dec[dnum](channel)
@@ -278,22 +284,22 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                         else:
                             decoded_valid[dnum]=(dec[dnum](cancelled))
                             cancelled = torch.view_as_real(torch.view_as_complex(cancelled)/torch.view_as_complex(enc[dnum](y_valid_onehot)))
-                if num==len(M)-1 and canc_method=='nn':
+                if num==length-1 and canc_method=='nn':
                     #cancelled=[]
-                    for dnum in range(len(M)):
+                    for dnum in range(length):
                         y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,dnum]]
                         if dnum==0:
                             decoded_valid[dnum]=dec[dnum](channel).detach()
                             # canceller
                             cancelled = (canc[dnum](channel,enc[dnum](y_valid_onehot)))
-                        elif dnum==len(M)-1:
+                        elif dnum==length-1:
                             decoded_valid[dnum]=dec[dnum](cancelled).detach()
                         else:
                             decoded_valid[dnum]=dec[dnum](cancelled)
                             cancelled = (canc[dnum](cancelled,enc[dnum](y_valid_onehot)))
 
 
-            for num in range(len(M)):
+            for num in range(length):
                 validation_BER[epoch].append(BER((softmax(decoded_valid[num])), y_valid[:,num],M[num]))
                 validation_SERs[num][epoch] = SER((softmax(decoded_valid[num])), y_valid[:,num])
                 if printing==True:
@@ -304,7 +310,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     #Weight is increased, when error probability is higher than symbol probability -> misclassification 
                     weight[num] += 1
                 gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],(softmax(decoded_valid[num])), y_valid[:,num])
-            weight=weight/torch.sum(weight)*len(M) # normalize weight sum
+            weight=weight/torch.sum(weight)*length # normalize weight sum
             gmi[epoch], t =GMI_est(validation_SERs[:,epoch],M,validation_BER[epoch])
             gmi_est2[epoch] = torch.sum(t)
 
@@ -326,7 +332,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
             if torch.sum(validation_SERs[:,epoch])<0.3:
                 #set weights back if under threshold
-                weight=torch.ones(len(M))
+                weight=torch.ones(length)
             
             validation_received.append(cp.asarray(channel.detach()))
 
@@ -334,21 +340,21 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         decision_region_evolution = []
         # constellations only used for plotting
         constellation_base = []
-        for num in range(len(M)):
+        for num in range(length):
             constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
         
         constellations = cp.asarray(constellation_base[0])
-        for num in range(len(M)-1):
+        for num in range(length-1):
             constellationsplus = cp.asarray(constellation_base[num+1])
             constellations = cp.kron(constellations,constellationsplus)
     
         # store decision region of best implementation
         if canc_method=='none':
-            for num in range(len(M)):
+            for num in range(length):
                 mesh_prediction = (softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
                 decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         elif canc_method=='div':
-            for num in range(len(M)):
+            for num in range(length):
                 #decision_region_evolution.append([])
                 if num==0:
                     mesh_prediction = (softmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
@@ -358,11 +364,11 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                     canc_grid = torch.view_as_real(torch.view_as_complex(canc_grid)/torch.view_as_complex(enc[num](mesh_prediction)))
                 decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         else:
-            for dnum in range(len(M)):
+            for dnum in range(length):
                 if dnum==0:
                     mesh_prediction=dec_best[dnum](torch.Tensor(meshgrid).to(device))
                     cancelled=canc_best[dnum](torch.Tensor(meshgrid).to(device),enc_best[dnum](softmax(mesh_prediction)))
-                elif dnum==len(M)-1:
+                elif dnum==length-1:
                     mesh_prediction=dec_best[dnum](cancelled)
                 else:
                     mesh_prediction=dec_best[dnum](cancelled)

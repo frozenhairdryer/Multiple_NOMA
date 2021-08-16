@@ -14,17 +14,11 @@ encs=nn.ModuleList([])
 GMI_serial=[]
 for m in range(len(M)):
     if m==0:
-        M=torch.tensor([4,1], dtype=int)
-        sigma_n=torch.tensor([0.09,0], dtype=float)
-        mradius = torch.tensor([1, 1],device=device)
-        canc_method,encoder_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M,sigma_n,train_params=cp.array([30,300,0.002]),canc_method='div', modradius=mradius, plotting=False)
-    elif m==len(M):
-        M=torch.tensor([4,4], dtype=int)
-        sigma_n=torch.tensor([0.09,0.09], dtype=float)
-        mradius = torch.tensor([1, 1/3*np.sqrt(2)],device=device)
-        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M,sigma_n,train_params=cp.array([30,300,0.002]),canc_method='div', modradius=mradius, plotting=True, encoder=encs)
+        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M[0],sigma_n[0],train_params=cp.array([30,300,0.002]),canc_method='div', modradius=mradius[0], plotting=False)
+    elif m==len(M)-1:
+        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M[0:m+1],sigma_n[0:m+1],train_params=cp.array([30,300,0.002]),canc_method='div', modradius=mradius[0:m+1], plotting=True, encoder=encs[m-1])
     else:
-         canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M,sigma_n,train_params=cp.array([30,300,0.002]),canc_method='div', modradius=mradius, plotting=False, encoder=encs)
+         canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M[0:m+1],sigma_n[0:m+1],train_params=cp.array([30,300,0.002]),canc_method='div', modradius=mradius[0:m+1], plotting=False, encoder=encs[m-1])
     encs.append(enc_best)
     g = gmi_exact.detach().cpu().numpy()
     GMI_serial.append(g)
@@ -37,7 +31,7 @@ matplotlib.rcParams.update({
 'font.size' : 10,
 })
 
-plt.figure("GMIs",figsize=(3,2.5))
+plt.figure("GMIs_serial",figsize=(3,2.5))
     #plt.plot(GMIs_appr.cpu().detach().numpy(),linestyle='--',label='Appr.')
     #plt.plot(gmi_hd,linestyle='--',label='GMI Hard decision')
     #plt.plot(max_GMI,GMIs_appr[max_GMI],c='red')
@@ -51,14 +45,14 @@ for lnum in range(len(M)):
         else:
             plt.fill_between(np.arange(len(t))+offset,t,(t+gmi_exact[:,num]),alpha=0.4)
             t+=gmi_exact[:,num]
-    plt.plot(t, label='GMI')
-    plt.plot(argmax(t),max(t),marker='o',c='red')
-    plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
-    plt.xlabel('epoch no.')
-    plt.ylabel('GMI')
-    plt.ylim(0,4)
-    plt.legend(loc=3)
-    plt.grid(which='both')
-    plt.title('GMI on Validation Dataset')
-    plt.tight_layout()
-    plt.savefig("Multiple_NOMA/figures/gmis.pdf")
+    plt.plot(np.arange(len(t))+offset,t, color='b')
+plt.plot(argmax(t)+offset,max(t),marker='o',c='red')
+plt.annotate('Max', (0.95*argmax(t)+offset,0.9*max(t)),c='red')
+plt.xlabel('epoch no.')
+plt.ylabel('GMI')
+plt.ylim(0,4)
+plt.legend(loc=3)
+plt.grid(which='both')
+plt.title('GMI on Validation Dataset')
+plt.tight_layout()
+plt.savefig("Multiple_NOMA/figures/gmis_serial.pdf")
