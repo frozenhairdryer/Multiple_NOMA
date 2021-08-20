@@ -134,10 +134,10 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
                     # Propagate (training) data through the first transmitter
                     modulated = enc[0](batch_labels[:,num])
                     # Propagate through channel 1
-                    received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                    received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 else:
                     modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels[:,num])))))
-                    received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                    received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
                 if num==len(M)-1:
                     if canc_method=='none':
@@ -216,14 +216,14 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
                 if num==0:
                     encoded = enc[num](y_valid[:,num]).to(device)
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[0]))
-                    channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     # color map for plot
                     if plotting==True:
                         cvalid=y_valid[:,num]
                 else:
                     encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](y_valid[:,num]))))
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[num]))
-                    channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     #color map for plot
                     if plotting==True:
                         cvalid= cvalid+int(M[num])*y_valid[:,num]
@@ -344,5 +344,5 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
 
 
 M=torch.tensor([4,4], dtype=int)
-sigma_n=torch.tensor([0.08,0.08], dtype=float)
-t_Multipl_NOMA(M,sigma_n,train_params=cp.array([100,300,0.002]),canc_method='nn', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
+sigma_n=torch.tensor([0.09,0.09], dtype=float)
+t_Multipl_NOMA(M,sigma_n,train_params=cp.array([60,300,0.002]),canc_method='div', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)

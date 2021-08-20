@@ -11,8 +11,8 @@ num_epochs=60
 
 sigma_n=torch.tensor([0.09,0.09])
 M=torch.tensor([4,4])
-#alph=torch.tensor([1,1/3*np.sqrt(2)])
-alph=torch.tensor([1,1])
+alph=torch.tensor([1,1/3*np.sqrt(2)])
+#alph=torch.tensor([1,1])
 
 params=[runs,num_epochs,sigma_n,M,alph]
 
@@ -60,7 +60,7 @@ for item in range(runs):
 ## NN canceller 
 GMI_nncanc=[]
 list_nncanc=[]
-compare_data.append([])
+#compare_data.append([])
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')

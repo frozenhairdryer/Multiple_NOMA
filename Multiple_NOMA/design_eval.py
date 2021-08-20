@@ -4,12 +4,19 @@ import numpy as np
 from training_routine import *
 import pickle
 
+matplotlib.rcParams.update({
+"pgf.texsystem": "pdflatex",
+'font.family': 'serif',
+'text.usetex': True,
+'pgf.rcfonts': False,
+'font.size' : 10,
+})
 
 ### parameters
 runs = 50
 num_epochs=100
 
-sigma_n=torch.tensor([0.09,0.09])
+sigma_n=torch.tensor([0.18,0.18])
 M=torch.tensor([4,4])
 alph=torch.tensor([1,1/3*np.sqrt(2)])
 alph1=torch.tensor([1,1])
@@ -25,7 +32,7 @@ list_freecanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='div', modradius=alph1, plotting=False)
+    _,en, dec, canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph1, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_freecanc.append(np.sum(g, axis=1))
     list_freecanc.append(ser)

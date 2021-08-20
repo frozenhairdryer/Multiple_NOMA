@@ -164,12 +164,12 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 if num==0:
                     # Propagate (training) data through the first transmitter
                     modulated = enc[0](batch_labels_onehot).to(device)
-                    # Propagate through channel 1
-                    received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                    # Propagate through channel 1; 0.5*sigma because noise is added to inphase and quadrature
+                    received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 else:
                     modulated = enc[num](batch_labels_onehot).to(device)
                     modulated += torch.view_as_real((torch.view_as_complex(received)))
-                    received = torch.add(modulated, sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                    received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
                 if num==len(M)-1:
                     if canc_method=='none':
@@ -248,14 +248,14 @@ def Add_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', mod
                 if num==0:
                     encoded = (enc[num](y_valid_onehot)).to(device)
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[0]))
-                    channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     # color map for plot
                     if plotting==True:
                         cvalid=y_valid[:,num]
                 else:
                     encoded = torch.view_as_real((torch.view_as_complex(channel)+(torch.view_as_complex(enc[num](y_valid_onehot)))))
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[num]))
-                    channel = torch.add(encoded, float(sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     #color map for plot
                     if plotting==True:
                         cvalid= cvalid+int(M[num])*y_valid[:,num]
