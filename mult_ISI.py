@@ -9,7 +9,7 @@ import matplotlib
 # plt.rc('font', **font)
 # plt.rc('text', usetex=matplotlib.checkdep_usetex(True))
 
-matplotlib.use("pgf")
+#matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
     'font.family': 'serif',
@@ -67,10 +67,13 @@ def get_rc_ir(K, n_up, t_symbol, beta):
     return rc
 
 # modulation scheme and constellation points
-M = [4,4]
+#M = [4,4]
+M=[2,2]
 #mradius=1/3*np.sqrt(2)
 #c2 = (1+mradius*np.array([1,-1j,1j,-1]))/(1+mradius)
-constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
+#constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
+constellation_points = [[ -1, 1],[1j,1]]
+dispersion=True
 
 # symbol time and number of symbols    
 t_symb = 1.0
@@ -79,8 +82,8 @@ n_symb = 100
 
 # parameters of the RRC filter
 beta = .33
-n_up = 9            # samples per symbol
-syms_per_filt = 4  # symbols per filter (plus minus in both directions)
+n_up = 15         # samples per symbol
+syms_per_filt = 6  # symbols per filter (plus minus in both directions)
 
 K_filt = 2 * syms_per_filt * n_up + 1         # length of the fir filter
 
@@ -103,7 +106,7 @@ sinc = np.sinc(np.linspace(-syms_per_filt,syms_per_filt, K_filt))
 sinc /= np.linalg.norm( sinc )
 
 t = np.linspace(-syms_per_filt,syms_per_filt, K_filt)
-gauss = np.exp(-2.5*(np.linspace(-syms_per_filt,syms_per_filt, K_filt))**2)
+gauss = np.exp(-2.5*(np.linspace(-syms_per_filt,syms_per_filt, K_filt)**2))
 gauss /=np.linalg.norm( gauss)
 
 # get pulse spectra
@@ -120,7 +123,7 @@ GAUSS_PSD = np.abs( np.fft.fftshift( np.fft.fft( gauss, N_fft ) ) )**2
 GAUSS_PSD /= n_up
 
 # number of realizations along which to average the psd estimate
-n_real = 10
+n_real = 20
 
 # initialize two-dimensional field for collecting several realizations along which to average 
 S_rc = np.zeros( (n_real, N_fft ), dtype=complex ) 
@@ -164,11 +167,31 @@ for k in range( n_real ):
             s_sinc = s_sinc * np.convolve( sinc, s_up_sinc)
             s_gauss = s_gauss * np.convolve( gauss, s_up_gauss)
         
-        # get spectrum using Bartlett method
-        S_rc[k, :] = np.fft.fftshift( np.fft.fft( s_rc, N_fft ) )
-        S_rect[k, :] = np.fft.fftshift( np.fft.fft( s_rect, N_fft ) )
-        S_sinc[k, :] = np.fft.fftshift( np.fft.fft(s_sinc, N_fft))
-        S_gauss[k, :] = np.fft.fftshift( np.fft.fft(s_gauss, N_fft))
+        if dispersion==True:
+            d=16*1e-12 #Dispersion coefficient ps/(nm*km)
+            L=0 #fiber length, km
+            #alpha=10**(0.2/10) # Attenuation [1/km]
+            #lam = 1550 # wavelength, [nm]
+            c=3*10^8
+
+            S_rc[k, :] = np.fft.fft( s_rc, N_fft ) *np.exp((-1j*2*np.pi*c*d)*L)
+            S_rect[k, :] = np.fft.fft( s_rect, N_fft ) *np.exp((-1j*2*np.pi*c*d)*L)
+            S_sinc[k, :] = np.fft.fft(s_sinc, N_fft)*np.exp((-1j*2*np.pi*c*d)*L)
+            S_gauss[k, :] = np.fft.fft(s_gauss, N_fft)*np.exp((-1j*2*np.pi*c*d)*L)
+
+            s_rc = np.fft.ifft(S_rc[k,:],len(s_rc))
+            s_rect = np.fft.ifft(S_rect[k,:],len(s_rc))
+            s_sinc = np.fft.ifft(S_sinc[k,:],len(s_rc))
+            s_gauss = np.fft.ifft(S_gauss[k,:],len(s_rc))
+
+
+
+        
+    # get spectrum using Bartlett method
+    S_rc[k, :] = np.fft.fftshift( np.fft.fft( s_rc, N_fft ) )
+    S_rect[k, :] = np.fft.fftshift( np.fft.fft( s_rect, N_fft ) )
+    S_sinc[k, :] = np.fft.fftshift( np.fft.fft(s_sinc, N_fft))
+    S_gauss[k, :] = np.fft.fftshift( np.fft.fft(s_gauss, N_fft))
         
 
 
@@ -190,15 +213,16 @@ plt.figure("mult_ISI", figsize=[6,8])
 plt.subplot(321)
 
 #plt.plot( np.arange( np.size( rc ) ) * t_symb / n_up, rc, linewidth=2.0, label='RC' )
-plt.plot( np.arange( np.size( rect ) ) * t_symb / n_up, rect, linewidth=2.0, label=r'Rect' )
-plt.plot( np.arange( np.size( sinc ) ) * t_symb / n_up, sinc, linewidth=2.0, label=r'Sinc' )
-plt.plot( np.arange( np.size( gauss ) ) * t_symb / n_up, gauss, linewidth=2.0, label=r'Gauss' )
+plt.plot( np.arange( np.size( rect ) ) * t_symb / n_up, rect, linewidth=1.0, label=r'Rect' )
+plt.plot( np.arange( np.size( sinc ) ) * t_symb / n_up, sinc, linewidth=1.0, label=r'Sinc' )
+plt.plot( np.arange( np.size( gauss ) ) * t_symb / n_up, gauss, linewidth=1.0, label=r'Gauss' )
 
 #plt.ylim( (-.1, 1.1 ) ) 
 plt.grid( True )
 plt.legend( loc='upper left' )    
 #plt.title( '$g(t), s(t)$' )
 plt.ylabel('$g(t)$')
+#plt.xlim(-4,4)
 
 
 # plt.subplot(322)
@@ -216,9 +240,9 @@ plt.ylabel('$g(t)$')
 plt.subplot(322)
 np.seterr(divide='ignore') # ignore warning for logarithm of 0
 #plt.plot( f_vec, 10*np.log10( RC_PSD_sim ), linewidth=2.0, label='RC' )
-plt.plot( f_vec, 10*np.log10( RECT_PSD_sim ), linewidth=2.0, label=r'Rect' ) 
-plt.plot( f_vec, 10*np.log10( SINC_PSD_sim ), linewidth=2.0, label=r'Sinc' ) 
-plt.plot( f_vec, 10*np.log10( GAUSS_PSD_sim ), linewidth=2.0, label=r'Gauss' ) 
+plt.plot( f_vec, 10*np.log10( RECT_PSD_sim ), linewidth=1.0, label=r'Rect' ) 
+plt.plot( f_vec, 10*np.log10( SINC_PSD_sim ), linewidth=1.0, label=r'Sinc' ) 
+plt.plot( f_vec, 10*np.log10( GAUSS_PSD_sim ), linewidth=1.0, label=r'Gauss' ) 
 
 #plt.plot( f_vec, 10*np.log10( RECT_PSD ), linewidth=2.0, label=r'Rect theory' )
 #plt.plot( f_vec, 10*np.log10( SINC_PSD ), linewidth=2.0, label=r'SINC theory' ) 
@@ -227,17 +251,18 @@ np.seterr(divide='warn') # enable warning for logarithm of 0
 
 plt.grid(True); 
 plt.xlabel('$fT$');  
-plt.ylabel( '$|S(f)|^2$' )   
+plt.ylabel( r'$|S(f)|^2$ [dB]' )   
 plt.legend(loc='upper left')
 plt.ylim( (-60, 10 ) )
+plt.xlim(-4,4)
 
 
 plt.subplot(312)
 
 #plt.plot( np.arange( np.size( np.real(s_rc[:20*n_up]))) * t_symb / n_up, np.real(s_rc[:20*n_up]), linewidth=2.0, label='RC' )
-plt.plot( np.arange( np.size( np.real(s_rect[:20*n_up]))) * t_symb / n_up, np.real(s_rect[:20*n_up]), linewidth=2.0, label=r'Rect') 
-plt.plot( np.arange( np.size( np.real(s_sinc[:20*n_up]))) * t_symb / n_up, np.real(s_sinc[:20*n_up]), linewidth=2.0, label=r'Sinc')  
-plt.plot( np.arange( np.size( np.real(s_gauss[:20*n_up]))) * t_symb / n_up, np.real(s_gauss[:20*n_up]), linewidth=2.0, label=r'Gauss')  
+plt.plot( np.arange( np.size( np.real(s_rect[:20*n_up]))) * t_symb / n_up, np.real(s_rect[:20*n_up]), linewidth=1.0, label=r'Rect') 
+plt.plot( np.arange( np.size( np.real(s_sinc[:20*n_up]))) * t_symb / n_up, np.real(s_sinc[:20*n_up]), linewidth=1.0, label=r'Sinc')  
+plt.plot( np.arange( np.size( np.real(s_gauss[:20*n_up]))) * t_symb / n_up, np.real(s_gauss[:20*n_up]), linewidth=1.0, label=r'Gauss')  
 #plt.plot( np.arange( np.size( s_up_rc[:20*n_up])) * t_symb / n_up, s_up_rc[:20*n_up], 'o', linewidth=2.0, label='Syms' )
 
 #plt.ylim( (-1, 1 ) )
@@ -252,9 +277,9 @@ plt.ylabel(r'$\Re\{s(t)\}$')
 plt.subplot(313)
 
 #plt.plot( np.arange( np.size( np.imag(s_rc[:20*n_up]))) * t_symb / n_up, np.imag(s_rc[:20*n_up]), linewidth=2.0, label='RC' )
-plt.plot( np.arange( np.size( np.imag(s_rect[:20*n_up]))) * t_symb / n_up, np.imag(s_rect[:20*n_up]), linewidth=2.0, label=r'Rect' )  
-plt.plot( np.arange( np.size( np.imag(s_sinc[:20*n_up]))) * t_symb / n_up, np.imag(s_sinc[:20*n_up]), linewidth=2.0, label=r'Sinc' )   
-plt.plot( np.arange( np.size( np.imag(s_gauss[:20*n_up]))) * t_symb / n_up, np.imag(s_gauss[:20*n_up]), linewidth=2.0, label=r'Gauss' )     
+plt.plot( np.arange( np.size( np.imag(s_rect[:20*n_up]))) * t_symb / n_up, np.imag(s_rect[:20*n_up]), linewidth=1.0, label=r'Rect' )  
+plt.plot( np.arange( np.size( np.imag(s_sinc[:20*n_up]))) * t_symb / n_up, np.imag(s_sinc[:20*n_up]), linewidth=1.0, label=r'Sinc' )   
+plt.plot( np.arange( np.size( np.imag(s_gauss[:20*n_up]))) * t_symb / n_up, np.imag(s_gauss[:20*n_up]), linewidth=1.0, label=r'Gauss' )     
 #plt.plot( np.arange( np.size( s_up_rc[:20*n_up])) * t_symb / n_up, s_up_rc[:20*n_up], 'o', linewidth=2.0, label='Syms' )
 
 #plt.ylim( (-1, 1 ) )
@@ -265,3 +290,26 @@ plt.ylabel(r'$\Im \{s(t)\}$')
 
 plt.tight_layout()
 plt.savefig('mult_ISI.pdf',bbox_inches='tight')
+
+plt.figure()
+np.seterr(divide='ignore') # ignore warning for logarithm of 0
+
+plt.plot( f_vec, 10*np.log10(RECT_PSD_sim) , linewidth=1.0, label=r'Rect' ) 
+plt.plot( f_vec, 10*np.log10(SINC_PSD_sim ), linewidth=1.0, label=r'Sinc' ) 
+plt.plot( f_vec, 10*np.log10(GAUSS_PSD_sim), linewidth=1.0, label=r'Gauss' ) 
+
+#plt.plot( f_vec, 10*np.log10( RECT_PSD ), linewidth=2.0, label=r'Rect theory' )
+#plt.plot( f_vec, 10*np.log10( SINC_PSD ), linewidth=2.0, label=r'SINC theory' ) 
+#plt.plot( f_vec, 10*np.log10( GAUSS_PSD ), linewidth=2.0, label=r'Gauss theory' )  
+np.seterr(divide='warn') # enable warning for logarithm of 0
+
+plt.grid(True); 
+plt.xlabel('$fT$');  
+plt.ylabel( r'$|S(f)|^2$ [dB]' )   
+plt.legend(loc='upper left')
+plt.ylim( (0, 1 ) )
+plt.xlim(-4,4)
+np.seterr(divide='warn') # enable warning for logarithm of 0
+
+
+plt.savefig('original_pulses.pdf')

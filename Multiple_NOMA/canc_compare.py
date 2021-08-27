@@ -44,7 +44,7 @@ list_divcanc=[]
 for item in range(runs):
     try:
         #exec(open("nn_enc_dec_divcanc.py").read())
-        _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='div', modradius=alph, plotting=False)
+        _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.008],canc_method='div', modradius=alph, plotting=False)
         list_divcanc.append(ser)
         g = gmi_exact.detach().cpu().numpy()
         GMI_divcanc.append(np.sum(g, axis=1))
@@ -64,7 +64,7 @@ list_nncanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph, plotting=False)
+    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.006],canc_method='nn', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_nncanc.append(np.sum(g, axis=1))
     list_nncanc.append(ser)
