@@ -377,6 +377,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         #decision_region_evolution = decision_region_evolution[::-1] 
             
     print('Training finished')
+    #print(constellation_base)
     if plotting==True:
         plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     if canc_method=='nn':

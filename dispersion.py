@@ -17,56 +17,9 @@ matplotlib.rcParams.update({
     'pgf.rcfonts': False,
 })
 
-########################
-# find impulse response of an RC filter
-########################
-def get_rc_ir(K, n_up, t_symbol, beta):
-    
-    ''' 
-    Determines coefficients of an RC filter 
-    
-    Formula out of: K.-D. Kammeyer, Nachrichtenübertragung
-    At poles, l'Hospital was used 
-    
-    NOTE: Length of the IR has to be an odd number
-    
-    IN: length of IR, upsampling factor, symbol time, roll-off factor
-    OUT: filter coefficients
-    '''
-
-    # check that IR length is odd
-    assert K % 2 == 1, 'Length of the impulse response should be an odd number'
-    
-    # map zero r to close-to-zero
-    if beta == 0:
-        beta = 1e-32
-
-
-    # initialize output length and sample time
-    rc = np.zeros( K )
-    t_sample = t_symbol / n_up
-    
-    
-    # time indices and sampled time
-    k_steps = np.arange( -(K-1) / 2.0, (K-1) / 2.0 + 1 )   
-    t_steps = k_steps * t_sample
-    
-    for k in k_steps.astype(int):
-        
-        if t_steps[k] == 0:
-            rc[ k ] = 1. / t_symbol
-            
-        elif np.abs( t_steps[k] ) == t_symbol / ( 2.0 * beta ):
-            rc[ k ] = beta / ( 2.0 * t_symbol ) * np.sin( np.pi / ( 2.0 * beta ) )
-            
-        else:
-            rc[ k ] = np.sin( np.pi * t_steps[k] / t_symbol ) / np.pi / t_steps[k] \
-                * np.cos( beta * np.pi * t_steps[k] / t_symbol ) \
-                / ( 1.0 - ( 2.0 * beta * t_steps[k] / t_symbol )**2 )
- 
-    return rc
-
-
+####
+# Function: Apply chromatic dispersion to pulse
+####
 def cd(sigIN,L,D,fa,lamb,alpha):
     #cd applies chromatic dispersion to the signal
     c0 = 299792458; #in m/s
@@ -88,8 +41,10 @@ M=[2,2]
 #mradius=1/3*np.sqrt(2)
 #c2 = (1+mradius*np.array([1,-1j,1j,-1]))/(1+mradius)
 #constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
-#constellation_points = [[ -1,1],[1j,-1j]] #addition
-constellation_points = [[1,-1],[np.exp(1j*np.pi/4), np.exp(-1j*np.pi/4)]]
+#constellation_points = [[ -1,1],[1j,-1j]] # addition
+constellation_points = [[1,-1], [1+1j,1-1j]] # multiplication
+#constellation_points = [[ 0.9999727 +0.00739252j,  0.0061883 +0.9961329j , 0.03276862-0.99794596j, -0.99756783+0.02455366j],[0.93617743-0.3515279j , 0.47354087-0.18245742j, 0.9338867 +0.35331026j, 0.48145026+0.19996208j]]
+precompensate=False
 
 # symbol time and number of symbols    
 t_symb = 3.2*1e-10
@@ -99,14 +54,12 @@ n_symb = 100
 # Fiber and dispersion parameters
 alpha = 0                                                   # 10**(0/10) # Attenuation approx 0.2 [1/km] 
 lam = 1550e-9                                               # wavelength, [nm]
-D = 17                                                        # [ps/nm/km]
+D = 20                                                        # [ps/nm/km]
 beta2 = - (D * np.square(lam)) / (2 * np.pi * 3e8) * 1e-3     # [s^2/km] propagation constant, lambda=1550nm is standard single-mode wavelength
 Ld = (t_symb)**2/np.abs(beta2)
 L = np.array([0,10,50,100])                                      # propagation distance in km
  
 
-# parameters of the RRC filter
-beta = .33
 n_up = 37         # samples per symbol
 syms_per_filt = 6  # symbols per filter (plus minus in both directions)
 t_samp = t_symb/n_up
@@ -120,19 +73,15 @@ N_fft = 512
 Omega = np.linspace( -np.pi, np.pi, N_fft)
 f_vec = Omega / ( 2 * np.pi * t_symb / n_up )
 
-# get RC pulse and rectangular pulse,
-# both being normalized to energy 1
-rc = get_rc_ir( K_filt, n_up, t_symb, beta )
-rc /= np.linalg.norm( rc ) 
-
-rect = np.append( np.ones( n_up ), np.zeros( len( rc ) - n_up ) )
-rect /= np.linalg.norm( rect )
-rect = np.roll(rect,int((len(rect)-n_up)/2))
-#rect = rect*np.max(rect) # get the same pulse amplitude than for multiplication  
-
+# get pulses
 sinc = np.sinc(np.linspace(-syms_per_filt,syms_per_filt, K_filt))
 sinc /= np.linalg.norm( sinc )
 #sinc = sinc*np.max(sinc)  # get the same pulse amplitude than for multiplication  
+
+rect = np.append( np.ones( n_up ), np.zeros( len( sinc ) - n_up ) )
+rect /= np.linalg.norm( rect )
+rect = np.roll(rect,int((len(rect)-n_up)/2))
+#rect = rect*np.max(rect) # get the same pulse amplitude than for multiplication  
 
 t = np.linspace(-syms_per_filt,syms_per_filt, K_filt)
 gauss = np.exp(-2.5*(np.linspace(-syms_per_filt,syms_per_filt, K_filt)**2))
@@ -140,9 +89,6 @@ gauss /=np.linalg.norm( gauss)
 #gauss = gauss*np.max(gauss) # get the same pulse amplitude than for multiplication  
 
 # get pulse spectra
-RC_PSD = np.abs( np.fft.fftshift( np.fft.fft( rc, N_fft ) ) )**2
-RC_PSD /= n_up
-
 RECT_PSD = np.abs( np.fft.fftshift( np.fft.fft( rect, N_fft ) ) )**2
 RECT_PSD /= n_up
 
@@ -156,14 +102,12 @@ GAUSS_PSD /= n_up
 n_real = 20
 
 # initialize two-dimensional field for collecting several realizations along which to average 
-S_rc = np.zeros( (n_real, N_fft ), dtype=complex ) 
 S_rect = np.zeros( (n_real, N_fft ), dtype=complex )
 S_sinc = np.zeros( (n_real, N_fft ), dtype=complex )
 S_gauss = np.zeros( (n_real, N_fft ), dtype=complex )
 
 # loop for multiple realizations in order to improve spectral estimation
 s_rect = np.zeros((len(L),len(rect)+n_symb * n_up-1), dtype=complex)
-s_rc = np.zeros((len(L),len(rc)+n_symb * n_up-1), dtype=complex)
 s_sinc = np.zeros((len(L),len(sinc)+n_symb * n_up-1), dtype=complex)
 s_gauss = np.zeros((len(L),len(gauss)+n_symb * n_up-1), dtype=complex)
 for k in range( n_real ):
@@ -173,10 +117,6 @@ for k in range( n_real ):
         data = np.random.randint( M[num], size = n_symb )
         const = constellation_points[num]
         s = [ const[ d ] for d in data ]
-
-        # apply RC filtering/pulse-shaping
-        s_up_rc = np.zeros( n_symb * n_up , dtype=complex)        
-        s_up_rc[ : : n_up ] = s
         
         # apply RECTANGULAR filtering/pulse-shaping
         s_up_rect = np.zeros( n_symb * n_up , dtype=complex)      
@@ -194,16 +134,30 @@ for k in range( n_real ):
         for value in range(len(L)):
             if num==0:
                 s_rect[value,:] = np.convolve( rect, s_up_rect)
-                s_rc[value,:] = np.convolve( rc, s_up_rc)
                 s_sinc[value,:] = np.convolve( sinc, s_up_sinc)
                 s_gauss[value,:] = np.convolve( gauss, s_up_gauss)
+                if precompensate==True:
+                    s_rect[value,:] = cd(s_rect[value,:],2*L[value],-D,fa,lam,alpha)
+                    s_sinc[value,:] = cd(s_sinc[value,:],2*L[value],-D,fa,lam,alpha)
+                    s_gauss[value,:] = cd(s_gauss[value,:],2*L[value],-D,fa,lam,alpha)
+
             else:
-                s_rect[value,:] = s_rect[value,:] * np.convolve( rect, s_up_rect)
-                s_rc[value,:] = s_rc[value,:] *  np.convolve( rc, s_up_rc)
-                s_sinc[value,:] = s_sinc[value,:] * np.convolve( sinc, s_up_sinc)
-                s_gauss[value,:] = s_gauss[value,:] * np.convolve( gauss, s_up_gauss)
+                # precompensation
+                if precompensate==True:
+                    ps_rect = cd(np.convolve( rect, s_up_rect),L[value],-D,fa,lam,alpha)
+                    ps_sinc = cd(np.convolve( sinc, s_up_rect),L[value],-D,fa,lam,alpha)
+                    ps_gauss = cd(np.convolve( gauss, s_up_rect),L[value],-D,fa,lam,alpha)
+
+                    s_rect[value,:] = s_rect[value,:] * ps_rect
+                    s_sinc[value,:] = s_sinc[value,:] * ps_sinc
+                    s_gauss[value,:] = s_gauss[value,:] * ps_gauss
+                else:
+                    s_rect[value,:] = s_rect[value,:] * np.convolve( rect, s_up_rect)
+                    s_sinc[value,:] = s_sinc[value,:] * np.convolve( sinc, s_up_rect)
+                    s_gauss[value,:] = s_gauss[value,:] * np.convolve( gauss, s_up_rect)
+
+                
         
-            s_rc[value,:] = cd(s_rc[value,:],L[value],D,fa,lam,alpha)
             s_rect[value,:] = cd(s_rect[value,:],L[value],D,fa,lam,alpha)
             s_sinc[value,:] = cd(s_sinc[value,:],L[value],D,fa,lam,alpha)
             s_gauss[value,:] = cd(s_gauss[value,:],L[value],D,fa,lam,alpha)
@@ -270,20 +224,21 @@ def plot_eye(eye, station, num,L,figure=None):
     
     figure = plt.figure("Eyediagram",figsize = (6,8), facecolor = 'w')
     time = (np.arange(eye.shape[1])-eye.shape[1]//2)
+    time = time/np.max(time)*(2*3.2*1e-10)
 
     ax1 = figure.add_subplot(len(L),2,2*num+1)
     #plt.subplot(121)
-    ax1.plot(time*1e3, np.real(eye.T), color = 'C0', alpha = 0.4)
+    ax1.plot(time, np.real(eye.T), color = 'C0', alpha = 0.4)
     plt.title(station)
     ax1.set_ylabel(r'$\Re\{s(t)\}$')
-    ax1.set_xlabel('Time')
+    ax1.set_xlabel('Time [s]')
     ax1.set_ylim(-0.05,0.05)
 
     ax1 = figure.add_subplot(len(L),2,2*num+2)
-    ax1.plot(time*1e3, np.imag(eye.T), color = 'C0', alpha = 0.4)
+    ax1.plot(time, np.imag(eye.T), color = 'C0', alpha = 0.4)
     #plt.title(station)
     ax1.set_ylabel(r'$\Im\{s(t)\}$')
-    ax1.set_xlabel('Time')
+    ax1.set_xlabel('Time [s]')
     ax1.set_ylim(-0.05,0.05)
     return figure
     #plt.tight_layout()
@@ -328,3 +283,20 @@ for l in range(len(L)):
         fig = plot_eye(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L,fig)
 plt.tight_layout()
 plt.savefig(f'eye_gauss.pdf')
+
+
+cmap = matplotlib.cm.tab20
+base = plt.cm.get_cmap(cmap)
+color_list = base.colors
+# plot received constellation
+plt.figure("constellation",figsize=(3,3))
+for x in range(n_symb):
+    plt.scatter(np.real(s_rect[0,x*n_up]), np.imag(s_rect[0,x*n_up]),color=color_list[0], alpha=0.8)
+    plt.scatter(np.real(s_rect[1,x*n_up]), np.imag(s_rect[2,x*n_up]),color=color_list[2], alpha=0.8)
+    plt.scatter(np.real(s_rect[2,x*n_up]), np.imag(s_rect[2,x*n_up]),color=color_list[4], alpha=0.8)
+plt.grid()
+plt.xlabel(r'$\Re\{s(t)\}$')
+plt.ylabel(r'$\Im\{s(t)\}$')
+plt.legend(['L = 0 km','L = 20 km','L = 100 km'], loc='lower right')
+plt.tight_layout()
+plt.savefig(f'dispersion_const_prec.pdf')
