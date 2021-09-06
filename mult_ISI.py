@@ -72,8 +72,10 @@ M=[2,2]
 #mradius=1/3*np.sqrt(2)
 #c2 = (1+mradius*np.array([1,-1j,1j,-1]))/(1+mradius)
 #constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
-constellation_points = [[ -1, 1],[1j,1]]
-dispersion=True
+#constellation_points = [[ -1, 1],[1j,1]]
+#constellation_points = [[ -1,1],[1j,-1j]] # addition
+constellation_points = [[1,-1], [1+1j,1-1j]] # multiplication
+
 
 # symbol time and number of symbols    
 t_symb = 1.0
@@ -101,13 +103,16 @@ rc /= np.linalg.norm( rc )
 rect = np.append( np.ones( n_up ), np.zeros( len( rc ) - n_up ) )
 rect /= np.linalg.norm( rect )
 rect = np.roll(rect,int((len(rect)-n_up)/2))
+#rect = rect*np.max(rect)  # get the same pulse amplitude than for multiplication 
 
 sinc = np.sinc(np.linspace(-syms_per_filt,syms_per_filt, K_filt))
 sinc /= np.linalg.norm( sinc )
+#sinc = sinc*np.max(sinc)  # get the same pulse amplitude than for multiplication 
 
 t = np.linspace(-syms_per_filt,syms_per_filt, K_filt)
 gauss = np.exp(-2.5*(np.linspace(-syms_per_filt,syms_per_filt, K_filt)**2))
 gauss /=np.linalg.norm( gauss)
+#gauss = gauss*np.max(gauss)  # get the same pulse amplitude than for multiplication 
 
 # get pulse spectra
 RC_PSD = np.abs( np.fft.fftshift( np.fft.fft( rc, N_fft ) ) )**2
@@ -163,27 +168,9 @@ for k in range( n_real ):
             s_gauss = np.convolve( gauss, s_up_gauss)
         else:
             s_rect = s_rect * np.convolve( rect, s_up_rect)
-            s_rc = s_rc *  np.convolve( rc, s_up_rc)
+            s_rc = s_rc * np.convolve( rc, s_up_rc)
             s_sinc = s_sinc * np.convolve( sinc, s_up_sinc)
             s_gauss = s_gauss * np.convolve( gauss, s_up_gauss)
-        
-        if dispersion==True:
-            d=16*1e-12 #Dispersion coefficient ps/(nm*km)
-            L=0 #fiber length, km
-            #alpha=10**(0.2/10) # Attenuation [1/km]
-            #lam = 1550 # wavelength, [nm]
-            c=3*10^8
-
-            S_rc[k, :] = np.fft.fft( s_rc, N_fft ) *np.exp((-1j*2*np.pi*c*d)*L)
-            S_rect[k, :] = np.fft.fft( s_rect, N_fft ) *np.exp((-1j*2*np.pi*c*d)*L)
-            S_sinc[k, :] = np.fft.fft(s_sinc, N_fft)*np.exp((-1j*2*np.pi*c*d)*L)
-            S_gauss[k, :] = np.fft.fft(s_gauss, N_fft)*np.exp((-1j*2*np.pi*c*d)*L)
-
-            s_rc = np.fft.ifft(S_rc[k,:],len(s_rc))
-            s_rect = np.fft.ifft(S_rect[k,:],len(s_rc))
-            s_sinc = np.fft.ifft(S_sinc[k,:],len(s_rc))
-            s_gauss = np.fft.ifft(S_gauss[k,:],len(s_rc))
-
 
 
         
@@ -313,3 +300,17 @@ np.seterr(divide='warn') # enable warning for logarithm of 0
 
 
 plt.savefig('original_pulses.pdf')
+
+cmap = matplotlib.cm.tab20
+base = plt.cm.get_cmap(cmap)
+color_list = base.colors
+# plot received constellation
+plt.figure("constellation",figsize=(3,3))
+for x in range(n_symb):
+    plt.scatter(np.real(s_gauss[x*n_up]), np.imag(s_gauss[x*n_up]),color=color_list[0], alpha=0.8)
+plt.grid()
+plt.xlabel(r'$\Re\{s(t)\}$')
+plt.ylabel(r'$\Im\{s(t)\}$')
+#plt.legend(['L = 0 km','L = 20 km','L = 100 km'], loc='lower right')
+plt.tight_layout()
+plt.savefig(f'ISI_const.pdf')

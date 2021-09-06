@@ -8,5 +8,5 @@
 from training_routine import *
 M=torch.tensor([4,4], dtype=int)
 sigma_n=torch.tensor([0.18,0.18], dtype=float)
-Multipl_NOMA(M,sigma_n,train_params=cp.array([60,300,0.005]),canc_method='div', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
+Multipl_NOMA(M,sigma_n,train_params=cp.array([20,600,0.005]),canc_method='div', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
  

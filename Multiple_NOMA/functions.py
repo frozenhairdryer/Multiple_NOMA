@@ -65,7 +65,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     'text.usetex': True,
     'pgf.rcfonts': False,
     'font.size' : 10,
-})
+    })
     
     cmap = matplotlib.cm.tab20
     base = plt.cm.get_cmap(cmap)
@@ -75,7 +75,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     sum_SERs = np.sum(SERs, axis=0)/len(M)
     min_SER_iter = np.argmin(cp.sum(SERs,axis=0))
     max_GMI = np.argmax(np.sum(gmi_exact, axis=1))
-    ext_max_plot = 1.2*np.max(np.abs(valid_r[int(min_SER_iter)]))
+    ext_max_plot = 1.2#*np.max(np.abs(valid_r[int(min_SER_iter)]))
 
     print('Minimum mean SER obtained: %1.5f (epoch %d out of %d)' % (sum_SERs[min_SER_iter], min_SER_iter, len(SERs[0])))
     print('Maximum obtained GMI: %1.5f (epoch %d out of %d)' % (np.sum(gmi_exact[max_GMI]),max_GMI,len(GMIs_appr)))

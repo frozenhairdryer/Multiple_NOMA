@@ -4,15 +4,22 @@ import numpy as np
 from training_routine import *
 import pickle
 
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+    'font.size' : 10,
+})
 
 ### parameters
 runs = 50
-num_epochs=60
+num_epochs = 60
 
-sigma_n=torch.tensor([0.09,0.09])
+sigma_n=torch.tensor([0.18,0.18])
 M=torch.tensor([4,4])
-alph=torch.tensor([1,1/3*np.sqrt(2)])
-#alph=torch.tensor([1,1])
+#alph=torch.tensor([1,1/3*np.sqrt(2)])
+alph=torch.tensor([1,1])
 
 params=[runs,num_epochs,sigma_n,M,alph]
 
@@ -21,7 +28,7 @@ GMI_nocanc=[]
 list_nocanc=[]
 #compare_data.append([])
 for item in range(runs):
-    _,en, dec, gmi, ser, gmi_exact =Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='none', modradius=alph, plotting=False)
+    _,en, dec, gmi, ser, gmi_exact =Multipl_NOMA(M,sigma_n,train_params=[num_epochs,600,0.005],canc_method='none', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_nocanc.append(np.sum(g, axis=1))
     list_nocanc.append(ser)
@@ -44,7 +51,7 @@ list_divcanc=[]
 for item in range(runs):
     try:
         #exec(open("nn_enc_dec_divcanc.py").read())
-        _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.008],canc_method='div', modradius=alph, plotting=False)
+        _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,600,0.005],canc_method='div', modradius=alph, plotting=False)
         list_divcanc.append(ser)
         g = gmi_exact.detach().cpu().numpy()
         GMI_divcanc.append(np.sum(g, axis=1))
@@ -64,7 +71,7 @@ list_nncanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.006],canc_method='nn', modradius=alph, plotting=False)
+    _,en, dec,canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,600,0.003],canc_method='nn', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_nncanc.append(np.sum(g, axis=1))
     list_nncanc.append(ser)
@@ -161,7 +168,7 @@ for item in range(runs):
 
 plt.plot(average_nocanc, c=color_list[0],linewidth=2, label="no cancellation")
 #plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
-plt.fill_between(np.arange(num_epochs), average_nocanc+var_nocanc,average_nocanc-var_nocanc, color=color_list[0], alpha=0.2)
+#plt.fill_between(np.arange(num_epochs), average_nocanc+var_nocanc,average_nocanc-var_nocanc, color=color_list[0], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nocanc1+var_nocanc1,average_nocanc1-var_nocanc1, color=color_list[2], alpha=0.2)
 
 #plt.title("Training GMIs without cancellation")
@@ -181,7 +188,7 @@ for item in range(runs):
 plt.plot(average_divcanc, c=color_list[2], linewidth=2, label="division cancellation")
 #plt.plot(average_dcanc1, c=color_list[6], linewidth=3, label="Enc"+str(1)+" division cancellation")
 
-plt.fill_between(np.arange(num_epochs), average_divcanc+var_divcanc,average_divcanc-var_divcanc, color=color_list[2], alpha=0.2)
+#plt.fill_between(np.arange(num_epochs), average_divcanc+var_divcanc,average_divcanc-var_divcanc, color=color_list[2], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_dcanc1+var_dcanc1,average_dcanc1-var_dcanc1, color=color_list[6], alpha=0.2)
 
 #plt.title("Training GMIs for Division cancellation")
@@ -199,7 +206,7 @@ for item in range(runs):
     plt.plot(GMI_nncanc[item],c=color_list[5],linewidth=1 ,alpha=0.9)
 plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")
 #plt.plot(average_nncanc1, c=color_list[10],linewidth=3, label="Enc"+str(1)+" NN cancellation")
-plt.fill_between(np.arange(num_epochs), average_nncanc+var_nncanc,average_nncanc-var_nncanc, color=color_list[4], alpha=0.2)
+#plt.fill_between(np.arange(num_epochs), average_nncanc+var_nncanc,average_nncanc-var_nncanc, color=color_list[4], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nncanc1+var_nncanc1,average_nncanc1-var_nncanc1, color=color_list[10], alpha=0.2)
 
 #plt.title("Training GMIs for NN cancellation")

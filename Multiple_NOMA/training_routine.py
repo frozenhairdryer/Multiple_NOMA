@@ -49,17 +49,13 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 dec.append(Decoder(M[const]))
                 enc[const].to(device)
                 # Adam Optimizer
-                #if const==0:
-                #    optimizer=optim.Adam(enc[const].parameters(), lr=learn_rate)
-                #    optimizer.add_param_group({'params':dec[const].parameters()})
-                #else:
-                #    optimizer.add_param_group({'params':enc[const].parameters()})
-                #    optimizer.add_param_group({'params':dec[const].parameters()})
+                # List of optimizers in case we want different learn-rates for different encoder-decoder Pairs
                 optimizer.append([])
                 optimizer[const].append(optim.Adam(enc[const].parameters(), lr=float(learn_rate)))
                 optimizer[const].append(optim.Adam(dec[const].parameters(), lr=float(learn_rate)))
+                #optimizer[const].add_param_group({'modradius':enc[const].modradius})
 
-                
+                  
         
         elif canc_method=='nn':
             canc = nn.ModuleList().to(device)
@@ -161,6 +157,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     gmi = torch.zeros(int(num_epochs),device=device)
     gmi_est2 = torch.zeros(int(num_epochs),device=device)
     gmi_exact = torch.zeros((int(num_epochs), bitnumber), device=device)
+    #mradius =[]
 
     for epoch in range(int(num_epochs)):
         batch_labels = torch.empty(int(batch_size_per_epoch[epoch]),length,dtype=torch.long, device=device)
@@ -251,6 +248,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
         with torch.no_grad(): #no gradient required on validation data 
             # compute validation SER, SNR, GMI
+            #mradius.append(enc[1].modradius.detach().cpu().numpy())
             if plotting==True:
                 cvalid = torch.zeros(N_valid)
             decoded_valid=torch.zeros((int(length),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
@@ -336,13 +334,15 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             
             validation_received.append(cp.asarray(channel.detach()))
 
+    constellation_base = []
+    for num in range(length):
+        constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
+
+
     if plotting==True:
         decision_region_evolution = []
         # constellations only used for plotting
-        constellation_base = []
-        for num in range(length):
-            constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
-        
+                
         constellations = cp.asarray(constellation_base[0])
         for num in range(length-1):
             constellationsplus = cp.asarray(constellation_base[num+1])
@@ -377,10 +377,24 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         #decision_region_evolution = decision_region_evolution[::-1] 
             
     print('Training finished')
+    # calculate effective modradius:
+    modr_eff = np.zeros(length)
+    for x in range(length):
+        #if modradius[length]!=1:
+        S = np.array([np.real(constellation_base[x]),np.imag(constellation_base[x])]).T
+        C, r2 = miniball.get_bounding_ball(S) # find smallest circle that contains all constellation points of that encoder
+        #idx = np.argmax(np.abs(1+constellation_base[x]))
+        #modr_eff[x] = np.abs(constellation_base[x][idx]*(C[0]+1j*C[1])/np.sqrt(r2))
+        if np.abs(C[0]+1j*C[1])<0.1:
+            modr_eff[x] = np.sqrt(r2)
+        else:
+            modr_eff[x] = np.sqrt(r2)/np.abs(C[0]+1j*C[1])
+
+    print('Effective Modradius for each Encoder is: '+str(modr_eff))
     #print(constellation_base)
     if plotting==True:
         plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     if canc_method=='nn':
-        return(canc_method,enc_best,dec_best,canc_best, gmi, validation_SERs,gmi_exact)
+        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact)
     else:
-        return(canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact)
+        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact)

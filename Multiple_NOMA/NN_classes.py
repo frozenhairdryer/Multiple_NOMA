@@ -10,7 +10,10 @@ class Encoder(nn.Module):
         self.fcT2 = nn.Linear(2*self.M, 2*self.M,device=device)
         self.fcT3 = nn.Linear(2*self.M, 2*self.M,device=device) 
         self.fcT5 = nn.Linear(2*self.M, 2,device=device)
-        self.modradius= mradius
+        #if mradius==1:
+        #    self.modradius = nn.Parameter(mradius.clone().detach(), requires_grad=False).cuda()
+        #else:
+        self.modradius = nn.Parameter(mradius.clone().detach(), requires_grad=False)
 
         # Non-linearity (used in transmitter and receiver)
         self.activation_function = nn.ELU()      
@@ -31,7 +34,8 @@ class Encoder(nn.Module):
         #    modulated = encoded
         if self.modradius!=1:
             modulated = torch.view_as_real((1+self.modradius*torch.view_as_complex(modulated))/(torch.max(torch.abs(1+self.modradius*torch.view_as_complex(modulated)))))
-            #todo: fix nomralization of modradius
+            #modulated = torch.view_as_real(1-self.modradius+self.modradius*torch.view_as_complex(modulated))
+        
         return modulated
     
 
