@@ -63,7 +63,7 @@ L = np.array([0,10,50,100])                                      # propagation d
 n_up = 37         # samples per symbol
 syms_per_filt = 6  # symbols per filter (plus minus in both directions)
 t_samp = t_symb/n_up
-fa = 1/(t_symb) *n_up                                            # 10GBit/s
+fa = 1/(t_symb) * n_up                                            # 10GBit/s
 
 K_filt = 2 * syms_per_filt * n_up + 1         # length of the fir filter
 

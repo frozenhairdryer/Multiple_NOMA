@@ -56,6 +56,74 @@ def GMI(M, my_outputs, mylabels):
             gmi[bit]=1-1/(len(llr))*torch.sum(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1+1e-12), axis=0)
         return gmi.flatten()
 
+def chromatic_dispersion(sigIN,fa):
+    #applies chromatic dispersion to the signal
+    c0 = 299792458                                              # in m/s
+    alpha = 0                                                   # 10**(0/10) # Attenuation approx 0.2 [1/km] 
+    lam = 1550e-9                                               # wavelength, [nm]
+    D = 20                                                      # [ps/nm/km]
+    beta2 = - (D * np.square(lam)) / (2 * np.pi * 3e8) * 1e-3   # [s^2/km] propagation constant, lambda=1550nm is standard single-mode wavelength
+    L = 50                                                      # in km
+    sigINf = np.fft.fftshift(np.fft.fft(sigIN))
+    f=np.linspace(-1/2,1/2,(len(sigIN)))*fa
+    
+    HCD = np.exp(( - 1j * beta2 / 2 * np.square(2*np.pi*f)) * L - alpha / 2 * L )
+    sigOUTf = sigINf*HCD
+    sigOUT = np.fft.ifft(np.fft.ifftshift(sigOUTf))
+    return sigOUT
+
+def channel(signal, fa, sigma, cd=False):
+    """Channel Simulation
+    Upsampled signal is processed according to noise, Chromatic dispersion parameters
+    Args:
+    signal (float): input signal to channel
+    sigma (float): Noise parameter (sigma^2 is noise variance).
+    cd (bool): toggles the simulation of chromatic dispersion for a fiber of 50km, D=17 ps/nm*km    
+
+    Returns:
+        r_signal: signal after channel, still upsampled
+
+    """
+    if cd == True:
+        signal = chromatic_dispersion(signal, fa)
+    r_signal = torch.add(signal, (0.5*sigma*torch.randn(len(signal)).to(device)+ 1j*0.5*sigma*torch.randn(len(signal)).to(device)))
+    return r_signal
+
+def pulseshape(samples, n_up, shape='rect'):
+    """Pulse Shaping
+    Upsample signal and apply pulseshape 'shape'
+    Args:
+    samples (complex): signal samples
+    n_up (int): Upsampling factor
+    shape (str): pulse shape, supported: 'rect', 'sinc'    
+
+    Returns:
+        r_signal: signal after pulseshaping
+        fa : sampling frequency for upsampled signal
+
+    """
+    t_symb = 3.2*1e-10     # Symbol duration for optical fiber
+    syms_per_filt = 6      # symbols per filter (plus minus in both directions)
+    K_filt = 2 * syms_per_filt * n_up + 1         # length of the fir filter
+    fa = 1/t_symb*n_up
+    if shape!='rect' and shape!='sinc':
+        raise ValueError("Variable shape can only take 'rect', 'rc' or 'sinc'!")
+    
+    if shape=='sinc':
+        pulse = np.sinc(np.linspace(-syms_per_filt,syms_per_filt, K_filt))
+        pulse /= np.max(pulse)
+
+    if shape=='rect':
+        pulse = np.append( np.ones( n_up ), np.zeros( K_filt - n_up ) )
+        pulse /= np.max(pulse)
+        pulse = np.roll(pulse,int((K_filt-n_up)/2))
+    
+    s_up = np.zeros( len(samples) * n_up , dtype=complex)      
+    s_up[ : : n_up ] = samples
+    r_signal = np.convolve(samples, pulse)
+    return r_signal, fa
+
+
 
 
 def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolution, meshgrid, constellation_base, gmi_exact, gmi_hd):

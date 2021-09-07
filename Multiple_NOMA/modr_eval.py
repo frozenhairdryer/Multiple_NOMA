@@ -61,10 +61,10 @@ color_list = base.colors
 fig, axs = plt.subplots(1,2, figsize=(6, 3), sharey=True, sharex=True)
 
 for x in range(runs):
-    axs[0].scatter(modr[x][0], GMI_best[x], color=color_list[0])
-    axs[1].scatter(modr[x][1], GMI_best[x], color=color_list[0])
-axs[0].set_xlabel(r'effective modradius user 1')
-axs[1].set_xlabel(r'effective modradius user 2')
+    axs[0].scatter(modr[x][0], GMI_best[x], color=color_list[0], alpha=0.8)
+    axs[1].scatter(modr[x][1], GMI_best[x], color=color_list[0], alpha=0.8)
+axs[0].set_xlabel(r'Effective Modradius User 1')
+axs[1].set_xlabel(r'Effective Modradius User 2')
 axs[0].set_ylabel(r'GMI')
 axs[1].set_ylabel(r'GMI')
 
