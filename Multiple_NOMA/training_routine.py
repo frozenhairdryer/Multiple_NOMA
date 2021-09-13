@@ -386,10 +386,10 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         C, r2 = miniball.get_bounding_ball(S) # find smallest circle that contains all constellation points of that encoder
         #idx = np.argmax(np.abs(1+constellation_base[x]))
         #modr_eff[x] = np.abs(constellation_base[x][idx]*(C[0]+1j*C[1])/np.sqrt(r2))
-        if np.abs(C[0]+1j*C[1])<0.5: # limiting modradius at 1 to prevent overlap
-            modr_eff[x] = np.sqrt(r2)
-        else:
-            modr_eff[x] = np.sqrt(r2)/np.abs(C[0]+1j*C[1])
+        #if np.abs(C[0]+1j*C[1])<0.5: # limiting modradius at 1 to prevent overlap
+        modr_eff[x] = np.sqrt(r2) # only measure r
+        #else:
+        #    modr_eff[x] = np.sqrt(r2)/np.abs(C[0]+1j*C[1])
 
     print('Effective Modradius for each Encoder is: '+str(modr_eff))
     #print(constellation_base)

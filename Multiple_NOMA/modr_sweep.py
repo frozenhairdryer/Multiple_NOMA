@@ -10,8 +10,10 @@ matplotlib.rcParams.update({
     'pgf.rcfonts': False,
 })
 
-#learnrate=[0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.01]
-#learnrate=[0.0001,0.0003,0.0006]
+cmap = matplotlib.cm.tab20
+base = plt.cm.get_cmap(cmap)
+color_list = base.colors
+
 length = 41
 modr = torch.linspace(0,1,length)
 
@@ -33,8 +35,8 @@ for lr in range(length):
 
 plt.figure("GMI modr sweep",figsize=(3,2.5))
 for num in range(runs):
-    plt.scatter(modr.detach().cpu().numpy(),gmi_nn[:,num],alpha=0.5)
-plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1))
+    plt.scatter(modr.detach().cpu().numpy(),gmi_nn[:,num],color=color_list[0],alpha=0.5)
+plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1), color=color_list[2])
 plt.xlabel('Modulation Radius')
 plt.ylabel("GMI")
 plt.grid()
@@ -43,7 +45,7 @@ plt.savefig("GMI_modrsweep.pgf")
 
 plt.figure("GMI modr sweep calc",figsize=(3,2.5))
 for num in range(runs):
-    plt.scatter(modr.detach().cpu().numpy(),mod_calc[:,num,1], alpha=0.5)
+    plt.scatter(modr.detach().cpu().numpy(),mod_calc[:,num,1], color=color_list[0], alpha=0.5)
 #plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1))
 plt.xlabel('Modulation Radius given')
 plt.ylabel("Modulation Radius calculated")
