@@ -36,7 +36,12 @@ for lr in range(length):
 plt.figure("GMI modr sweep",figsize=(3,2.5))
 for num in range(runs):
     plt.scatter(modr.detach().cpu().numpy(),gmi_nn[:,num],color=color_list[0],alpha=0.5)
+<<<<<<< HEAD
 plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1), color=color_list[2])
+=======
+plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1), color=color_list[2], label='Max')
+plt.plot(modr.detach().cpu().numpy(),np.mean(gmi_nn, axis=1), color=color_list[4], label='Mean')
+>>>>>>> a590c1f... modr sweep with average
 plt.xlabel('Modulation Radius')
 plt.ylabel("GMI")
 plt.grid()
@@ -48,7 +53,7 @@ for num in range(runs):
     plt.scatter(modr.detach().cpu().numpy(),mod_calc[:,num,1], color=color_list[0], alpha=0.5)
 #plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1))
 plt.xlabel('Modulation Radius given')
-plt.ylabel("Modulation Radius calculated")
+plt.ylabel("Radius calculated")
 plt.grid()
 plt.tight_layout()
 plt.savefig("GMI_modrsweep_calc.pgf")
