@@ -24,7 +24,7 @@ mod_calc = np.zeros([length,runs,2])
 #gmi_all =np.zeros([length,runs])
 for lr in range(length):
     for num in range(runs):
-        canc_method,enc_best,dec_best, mod, validation_SERs,gmi_exact=Multipl_NOMA(M=torch.tensor([4,4]),sigma_n=torch.tensor([0.18,0.18]),train_params=[50,600,0.005],canc_method='div', modradius=torch.tensor([1,modr[lr]]), plotting=False)
+        canc_method,enc_best,dec_best, mod, validation_SERs,gmi_exact, snr=Multipl_NOMA(M=torch.tensor([4,4]),sigma_n=torch.tensor([0.18,0.18]),train_params=[50,600,0.005],canc_method='div', modradius=torch.tensor([1,modr[lr]]), plotting=False)
         sum_SERs = np.sum(validation_SERs.detach().cpu().numpy(), axis=0)/2
         min_SER_iter = np.argmin(np.sum(validation_SERs.detach().cpu().numpy(),axis=0))
         gmi_nn[lr,num] = max(np.sum(gmi_exact.detach().cpu().numpy(), axis=1))
@@ -36,22 +36,20 @@ for lr in range(length):
 plt.figure("GMI modr sweep",figsize=(3,2.5))
 for num in range(runs):
     plt.scatter(modr.detach().cpu().numpy(),gmi_nn[:,num],color=color_list[0],alpha=0.5)
-<<<<<<< HEAD
-plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1), color=color_list[2])
-=======
 plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1), color=color_list[2], label='Max')
 plt.plot(modr.detach().cpu().numpy(),np.mean(gmi_nn, axis=1), color=color_list[4], label='Mean')
->>>>>>> a590c1f... modr sweep with average
 plt.xlabel('Modulation Radius')
 plt.ylabel("GMI")
 plt.grid()
 plt.tight_layout()
+plt.legend(loc=4)
 plt.savefig("GMI_modrsweep.pgf")
 
 plt.figure("GMI modr sweep calc",figsize=(3,2.5))
 for num in range(runs):
     plt.scatter(modr.detach().cpu().numpy(),mod_calc[:,num,1], color=color_list[0], alpha=0.5)
-#plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1))
+plt.plot(modr.detach().cpu().numpy(),np.mean(mod_calc[:,:,1], axis=1), color=color_list[4])
+#plt.plot(modr.detach().cpu().numpy(),np.max(gmi_nn, axis=1))sc
 plt.xlabel('Modulation Radius given')
 plt.ylabel("Radius calculated")
 plt.grid()

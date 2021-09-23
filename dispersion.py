@@ -42,9 +42,9 @@ M=[2,2]
 #c2 = (1+mradius*np.array([1,-1j,1j,-1]))/(1+mradius)
 #constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
 #constellation_points = [[ -1,1],[1j,-1j]] # addition
-constellation_points = [[1,-1], [1+1j,1-1j]] # multiplication
+constellation_points = [[1+1j,1-1j], [1,-1]] # multiplication
 #constellation_points = [[ 0.9999727 +0.00739252j,  0.0061883 +0.9961329j , 0.03276862-0.99794596j, -0.99756783+0.02455366j],[0.93617743-0.3515279j , 0.47354087-0.18245742j, 0.9338867 +0.35331026j, 0.48145026+0.19996208j]]
-precompensate=False
+precompensate=True
 
 # symbol time and number of symbols    
 t_symb = 3.2*1e-10
@@ -256,7 +256,7 @@ def plot_eye(eye, station, num,L,figure=None):
 #plot_eye(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'sinc')
 
 for l in range(len(L)):
-    eye_sig = s_sinc[l,n_up*(syms_per_filt):len(s_sinc[l,:])-n_up*(syms_per_filt+2)]
+    eye_sig = s_sinc[l,n_up*(syms_per_filt+2):len(s_sinc[l,:])-n_up*(syms_per_filt+2)]
     if l==0:
         fig = plot_eye(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L)
     else:
@@ -266,7 +266,7 @@ plt.savefig(f'eye_sinc.pdf')
 plt.close(fig)
 
 for l in range(len(L)):
-    eye_sig = s_rect[l,n_up*(syms_per_filt):len(s_sinc[l,:])-n_up*(syms_per_filt+2)]
+    eye_sig = s_rect[l,n_up*(syms_per_filt-2):len(s_sinc[l,:])-n_up*(syms_per_filt+4)]
     if l==0:
         fig = plot_eye(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L)
     else:

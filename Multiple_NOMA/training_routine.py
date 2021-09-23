@@ -157,6 +157,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     gmi = torch.zeros(int(num_epochs),device=device)
     gmi_est2 = torch.zeros(int(num_epochs),device=device)
     gmi_exact = torch.zeros((int(num_epochs), bitnumber), device=device)
+    SNR = np.zeros(num_epochs)
     #mradius =[]
 
     for epoch in range(int(num_epochs)):
@@ -253,20 +254,20 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             if plotting==True:
                 cvalid = torch.zeros(N_valid)
             decoded_valid=torch.zeros((int(length),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
-            SNR = torch.zeros(int(length), device=device)
+            #SNR = torch.zeros(int(length), device=device)
             for num in range(length):
                 y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,num]]
                 
                 if num==0:
                     encoded = enc[num](y_valid_onehot).to(device)
-                    SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[0]))
+                    #SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[0]))
                     channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     # color map for plot
                     if plotting==True:
                         cvalid=y_valid[:,num]
                 else:
                     encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](y_valid_onehot))))
-                    SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[num]))
+                    #SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[num]))
                     channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     #color map for plot
                     if plotting==True:
@@ -335,15 +336,35 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             
             validation_received.append(cp.asarray(channel.detach()))
 
-    constellation_base = []
-    for num in range(length):
-        constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
+            constellation_base = []
+            for num in range(length):
+                constellation_base.append(torch.view_as_complex(enc[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
 
+            constellations = cp.asarray(constellation_base[0])
+            for num in range(length-1):
+                constellationsplus = cp.asarray(constellation_base[num+1])
+                constellations = cp.kron(constellations,constellationsplus)
+
+            for num in range(length):
+                if num==0:
+                    N0 = sigma_n.detach().cpu().numpy()[num]**2
+                else:
+                    N0 *= np.mean(np.abs(constellation_base[num])**2)
+                    N0 += sigma_n.detach().cpu().numpy()[num]**2
+            
+            SNR[epoch] = 10*np.log10(np.mean(np.abs(constellations)**2)/(N0+1e-9))
+
+    
+
+    
 
     if plotting==True:
         decision_region_evolution = []
         # constellations only used for plotting
-                
+        constellation_base = []
+        for num in range(length):
+            constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())      
+        
         constellations = cp.asarray(constellation_base[0])
         for num in range(length-1):
             constellationsplus = cp.asarray(constellation_base[num+1])
@@ -396,6 +417,6 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     if plotting==True:
         plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     if canc_method=='nn':
-        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact)
+        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact, SNR)
     else:
-        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact)
+        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact, SNR)
