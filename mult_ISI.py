@@ -229,7 +229,7 @@ np.seterr(divide='ignore') # ignore warning for logarithm of 0
 #plt.plot( f_vec, 10*np.log10( RC_PSD_sim ), linewidth=2.0, label='RC' )
 plt.plot( f_vec, 10*np.log10( RECT_PSD_sim ), linewidth=1.0, label=r'Rect' ) 
 plt.plot( f_vec, 10*np.log10( SINC_PSD_sim ), linewidth=1.0, label=r'Sinc' ) 
-plt.plot( f_vec, 10*np.log10( GAUSS_PSD_sim ), linewidth=1.0, label=r'Gauss' ) 
+#plt.plot( f_vec, 10*np.log10( GAUSS_PSD_sim ), linewidth=1.0, label=r'Gauss' ) 
 
 #plt.plot( f_vec, 10*np.log10( RECT_PSD ), linewidth=2.0, label=r'Rect theory' )
 #plt.plot( f_vec, 10*np.log10( SINC_PSD ), linewidth=2.0, label=r'SINC theory' ) 
@@ -238,7 +238,7 @@ np.seterr(divide='warn') # enable warning for logarithm of 0
 
 plt.grid(True); 
 plt.xlabel('$fT$');  
-plt.ylabel( r'$|S(f)|^2$ [dB]' )   
+plt.ylabel( r'$|S(f)|^2$ (dB)' )   
 plt.legend(loc='upper left')
 plt.ylim( (-60, 10 ) )
 plt.xlim(-4,4)
@@ -249,7 +249,7 @@ plt.subplot(312)
 #plt.plot( np.arange( np.size( np.real(s_rc[:20*n_up]))) * t_symb / n_up, np.real(s_rc[:20*n_up]), linewidth=2.0, label='RC' )
 plt.plot( np.arange( np.size( np.real(s_rect[:20*n_up]))) * t_symb / n_up, np.real(s_rect[:20*n_up]), linewidth=1.0, label=r'Rect') 
 plt.plot( np.arange( np.size( np.real(s_sinc[:20*n_up]))) * t_symb / n_up, np.real(s_sinc[:20*n_up]), linewidth=1.0, label=r'Sinc')  
-plt.plot( np.arange( np.size( np.real(s_gauss[:20*n_up]))) * t_symb / n_up, np.real(s_gauss[:20*n_up]), linewidth=1.0, label=r'Gauss')  
+#plt.plot( np.arange( np.size( np.real(s_gauss[:20*n_up]))) * t_symb / n_up, np.real(s_gauss[:20*n_up]), linewidth=1.0, label=r'Gauss')  
 #plt.plot( np.arange( np.size( s_up_rc[:20*n_up])) * t_symb / n_up, s_up_rc[:20*n_up], 'o', linewidth=2.0, label='Syms' )
 
 #plt.ylim( (-1, 1 ) )
@@ -266,7 +266,7 @@ plt.subplot(313)
 #plt.plot( np.arange( np.size( np.imag(s_rc[:20*n_up]))) * t_symb / n_up, np.imag(s_rc[:20*n_up]), linewidth=2.0, label='RC' )
 plt.plot( np.arange( np.size( np.imag(s_rect[:20*n_up]))) * t_symb / n_up, np.imag(s_rect[:20*n_up]), linewidth=1.0, label=r'Rect' )  
 plt.plot( np.arange( np.size( np.imag(s_sinc[:20*n_up]))) * t_symb / n_up, np.imag(s_sinc[:20*n_up]), linewidth=1.0, label=r'Sinc' )   
-plt.plot( np.arange( np.size( np.imag(s_gauss[:20*n_up]))) * t_symb / n_up, np.imag(s_gauss[:20*n_up]), linewidth=1.0, label=r'Gauss' )     
+#plt.plot( np.arange( np.size( np.imag(s_gauss[:20*n_up]))) * t_symb / n_up, np.imag(s_gauss[:20*n_up]), linewidth=1.0, label=r'Gauss' )     
 #plt.plot( np.arange( np.size( s_up_rc[:20*n_up])) * t_symb / n_up, s_up_rc[:20*n_up], 'o', linewidth=2.0, label='Syms' )
 
 #plt.ylim( (-1, 1 ) )
@@ -283,7 +283,7 @@ np.seterr(divide='ignore') # ignore warning for logarithm of 0
 
 plt.plot( f_vec, 10*np.log10(RECT_PSD_sim) , linewidth=1.0, label=r'Rect' ) 
 plt.plot( f_vec, 10*np.log10(SINC_PSD_sim ), linewidth=1.0, label=r'Sinc' ) 
-plt.plot( f_vec, 10*np.log10(GAUSS_PSD_sim), linewidth=1.0, label=r'Gauss' ) 
+#plt.plot( f_vec, 10*np.log10(GAUSS_PSD_sim), linewidth=1.0, label=r'Gauss' ) 
 
 #plt.plot( f_vec, 10*np.log10( RECT_PSD ), linewidth=2.0, label=r'Rect theory' )
 #plt.plot( f_vec, 10*np.log10( SINC_PSD ), linewidth=2.0, label=r'SINC theory' ) 
@@ -292,7 +292,7 @@ np.seterr(divide='warn') # enable warning for logarithm of 0
 
 plt.grid(True); 
 plt.xlabel('$fT$');  
-plt.ylabel( r'$|S(f)|^2$ [dB]' )   
+plt.ylabel( r'$|S(f)|^2$ (dB)' )   
 plt.legend(loc='upper left')
 plt.ylim( (0, 1 ) )
 plt.xlim(-4,4)

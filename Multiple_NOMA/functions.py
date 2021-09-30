@@ -181,6 +181,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
     plt.xlabel('epoch no.')
     plt.ylabel('GMI')
+    plt.xlim(0,len(t)-1)
     plt.ylim(0,4)
     plt.legend(loc=3)
     plt.grid(which='both')
@@ -198,7 +199,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     for h in helper:
         bitmapping.append(format(h, '04b'))
 
-    plt.figure("constellation", figsize=(3,3))
+    plt.figure("constellation", figsize=(3,2.5))
     #plt.subplot(121)
     plt.scatter(np.real(constellations),np.imag(constellations),c=range(np.product(M.cpu().detach().numpy())), cmap='tab20',s=50)
     for i in range(len(constellations)):

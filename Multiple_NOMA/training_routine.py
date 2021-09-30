@@ -157,7 +157,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     gmi = torch.zeros(int(num_epochs),device=device)
     gmi_est2 = torch.zeros(int(num_epochs),device=device)
     gmi_exact = torch.zeros((int(num_epochs), bitnumber), device=device)
-    SNR = np.zeros(num_epochs)
+    SNR = np.zeros(int(num_epochs))
     #mradius =[]
 
     for epoch in range(int(num_epochs)):
@@ -417,6 +417,6 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     if plotting==True:
         plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     if canc_method=='nn':
-        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact, SNR)
+        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asnumpy(constellations))
     else:
-        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact, SNR)
+        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asnumpy(constellations))

@@ -306,7 +306,7 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
         # store decision region of best implementation
         if canc_method=='none':
             for num in range(len(M)):
-                mesh_prediction = (torch.argmax(dec_best[num](torch.Tensor(meshgrid).to(device))))
+                mesh_prediction = (dec_best[num](torch.Tensor(meshgrid).to(device)))
                 decision_region_evolution.append(0.195*mesh_prediction.detach().cpu().numpy() + 0.4)
         elif canc_method=='div':
             for num in range(len(M)):
@@ -344,5 +344,5 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
 
 
 M=torch.tensor([4,4], dtype=int)
-sigma_n=torch.tensor([0.09,0.09], dtype=float)
-t_Multipl_NOMA(M,sigma_n,train_params=cp.array([60,300,0.002]),canc_method='div', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
+sigma_n=torch.tensor([0.18,0.18], dtype=float)
+t_Multipl_NOMA(M,sigma_n,train_params=cp.array([60,600,0.005]),canc_method='none', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)
