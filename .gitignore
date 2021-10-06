@@ -3,6 +3,8 @@
 
 figures/
 back_data/
+## virtual environment
+simenv/
 
 ### Images ###
 # JPEG
@@ -166,6 +168,7 @@ target/
 # Jupyter Notebook
 
 # IPython
+.ipynb_checkpoints/
 
 # pyenv
 .python-version
