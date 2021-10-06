@@ -47,7 +47,7 @@ class Decoder(nn.Module):
         self.fcR1 = nn.Linear(2,2*self.M,device=device) 
         self.fcR2 = nn.Linear(2*self.M,2*self.M,device=device) 
         self.fcR3 = nn.Linear(2*self.M,2*self.M,device=device)
-        self.fcR4 = nn.Linear(2*self.M,2*self.M,device=device) 
+        #self.fcR4 = nn.Linear(2*self.M,2*self.M,device=device) 
         self.fcR5 = nn.Linear(2*self.M, self.M,device=device) 
         #self.alpha=torch.tensor([alph,alph])
         # Non-linearity (used in transmitter and receiver)
@@ -60,7 +60,7 @@ class Decoder(nn.Module):
         out = self.activation_function(self.fcR1(x))
         out = self.activation_function(self.fcR2(out))
         out = self.activation_function(self.fcR3(out))
-        out = self.activation_function(self.fcR4(out))
+        #out = self.activation_function(self.fcR4(out)) #only for theoretical setup needed
         logits = self.activation_function(self.fcR5(out))
         #norm_factor=1
         #if torch.sum(logits)>15:

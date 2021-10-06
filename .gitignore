@@ -69,6 +69,9 @@ back_data/
 *.3dm
 *.max
 
+# pgf files
+*.pgf
+
 ### JupyterNotebooks ###
 # gitignore template for Jupyter Notebooks
 # website: http://jupyter.org/
@@ -227,6 +230,7 @@ Thumbs.db
 
 # profiling data
 .prof
+
 
 
 # End of https://www.toptal.com/developers/gitignore/api/python,jupyternotebooks,images

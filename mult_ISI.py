@@ -307,7 +307,7 @@ color_list = base.colors
 # plot received constellation
 plt.figure("constellation",figsize=(3,3))
 for x in range(n_symb):
-    plt.scatter(np.real(s_gauss[x*n_up]), np.imag(s_gauss[x*n_up]),color=color_list[0], alpha=0.8)
+    plt.scatter(np.real(s_gauss[(x+syms_per_filt)*n_up]), np.imag(s_gauss[(x+syms_per_filt)*n_up]),color=color_list[0], alpha=0.8)
 plt.grid()
 plt.xlabel(r'$\Re\{s(t)\}$')
 plt.ylabel(r'$\Im\{s(t)\}$')

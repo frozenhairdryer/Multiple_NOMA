@@ -14,6 +14,9 @@ cmap = matplotlib.cm.tab20
 base = plt.cm.get_cmap(cmap)
 color_list = base.colors
 
+print(color_list[10])
+print(color_list[12])
+
 length = 41
 sigma_all = 0.3 #0.3
 sigma = np.zeros((length,2))
@@ -27,10 +30,10 @@ sum_sers=np.ones([length,runs])
 gmi =np.zeros([length,runs])
 mod_calc = np.zeros([length,runs,2])
 snr_all = np.zeros([length,runs])
-const_form = np.zeros([length,runs]) # number of symbols with amplitudes lower than 0.9
+const_form = np.zeros([length,runs], dtype=int) # number of symbols with amplitudes lower than 0.9
 
 #gmi_all =np.zeros([length,runs])
-for x in range(length):
+""" for x in range(length):
     for num in range(runs):
         canc_method,enc_best,dec_best, mod, validation_SERs,gmi_exact, snr,const =Multipl_NOMA(M=torch.tensor([4,4]),sigma_n=torch.tensor(sigma[x]),train_params=[30,600,0.005],canc_method='div', modradius=torch.tensor([1,0.58]), plotting=False)
         sum_SERs = np.sum(validation_SERs.detach().cpu().numpy(), axis=0)/2
@@ -47,26 +50,29 @@ for x in range(length):
 
 
 with open('noiseweight.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-    pickle.dump([sigma, gmi, snr_all, const_form], f)
+    pickle.dump([sigma, gmi, snr_all, const_form], f) """
+
+sigma, gmi, snr_all, const_form = pickle.load( open( "noiseweight.pkl", "rb" ) )
+
 
 plt.figure("GMI sigma weight",figsize=(3,2.5))
 for num in range(runs):
     for x in range(length):
-        plt.scatter(cp.asnumpy(sigma[x,0])**2,gmi[x,num],color=color_list[const_form[x,num]],alpha=0.5)
-plt.plot(cp.asnumpy(sigma[:,0])**2,np.max(gmi, axis=1), color=color_list[2], label='Max')
-plt.plot(cp.asnumpy(sigma[:,0])**2,np.mean(gmi, axis=1), color=color_list[4], label='Mean')
+        plt.scatter(cp.asnumpy(sigma[x,0])**2,gmi[x,num],color=color_list[int(const_form[x,num])],alpha=0.5)
+#plt.plot(cp.asnumpy(sigma[:,0])**2,np.max(gmi, axis=1), color=color_list[2], label='Max')
+#plt.plot(cp.asnumpy(sigma[:,0])**2,np.mean(gmi, axis=1), color=color_list[4], label='Mean')
 plt.xlabel(r'$\sigma_1^2$')
 plt.ylabel("GMI (bit)")
 plt.grid()
 plt.tight_layout()
-plt.legend(loc=4)
+#plt.legend(loc=4)
 plt.savefig("GMI_noiseweight.pgf")
 
 plt.figure("SNR sigma weight",figsize=(3,2.5))
 for num in range(runs):
     for x in range(length):
-        plt.scatter(cp.asnumpy(sigma[x,0])**2,snr_all[x,num],color=color_list[const_form[x,num]],alpha=0.5)
-plt.plot(cp.asnumpy(sigma[:,0])**2,np.mean(snr_all[:,:], axis=1), color=color_list[4])
+        plt.scatter(cp.asnumpy(sigma[x,0])**2,snr_all[x,num],color=color_list[int(const_form[x,num])],alpha=0.5)
+#plt.plot(cp.asnumpy(sigma[:,0])**2,np.mean(snr_all[:,:], axis=1), color=color_list[2])
 #plt.plot(modr.detach().cpu().numpy(),np.max(gmi, axis=1))
 plt.xlabel(r'$\sigma_1^2$')
 plt.ylabel("SNR (dB)")
@@ -76,7 +82,8 @@ plt.savefig("SNR_noiseweight.pgf")
 
 plt.figure("SNR vs GMI weight",figsize=(3,2.5))
 for num in range(runs):
-    plt.scatter(snr_all[:,num], gmi[:,num], color=color_list[const_form[:,num]], alpha=0.5)
+    for x in range(length):
+        plt.scatter(snr_all[x,num], gmi[x,num], color=color_list[int(const_form[x,num])], alpha=0.5)
 #plt.plot(cp.asnumpy(np.mean(snr_all[:,:], axis=1), color=color_list[4])
 #plt.plot(modr.detach().cpu().numpy(),np.max(gmi, axis=1))
 plt.ylabel(r'GMI$_{joint} (bit)$')

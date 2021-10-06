@@ -20,7 +20,7 @@ gmi_div =np.zeros([len(learnrate),runs])
 #gmi_all =np.zeros([len(learnrate),runs])
 for lr in range(len(learnrate)):
     for num in range(runs):
-        canc_method,enc_best,dec_best,canc_best, smi, validation_SERs,gmi_exact=Multipl_NOMA(M=torch.tensor([4,4]),sigma_n=torch.tensor([0.18,0.18]),train_params=[50,300,learnrate[lr]],canc_method='nn', modradius=torch.tensor([1,1/2*np.sqrt(2)]), plotting=False)
+        canc_method,enc_best,dec_best,canc_best, smi, validation_SERs,gmi_exact, snr, const =Multipl_NOMA(M=torch.tensor([4,4]),sigma_n=torch.tensor([0.18,0.18]),train_params=[50,300,learnrate[lr]],canc_method='nn', modradius=torch.tensor([1,1/2*np.sqrt(2)]), plotting=False)
         sum_SERs = np.sum(validation_SERs.detach().cpu().numpy(), axis=0)/2
         min_SER_iter = np.argmin(np.sum(validation_SERs.detach().cpu().numpy(),axis=0))
         gmi_nn[lr,num] = max(np.sum(gmi_exact.detach().cpu().numpy(), axis=1))

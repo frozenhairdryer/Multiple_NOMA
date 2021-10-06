@@ -413,6 +413,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         #    modr_eff[x] = np.sqrt(r2)/np.abs(C[0]+1j*C[1])
 
     print('Effective Modradius for each Encoder is: '+str(modr_eff))
+    max_GMI = np.argmax(np.sum(gmi_exact.detach().cpu().numpy(), axis=1))
+    print('SNR is '+str(SNR[max_GMI])+' dB')
     #print(constellation_base)
     if plotting==True:
         plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 

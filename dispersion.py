@@ -36,15 +36,15 @@ def cd(sigIN,L,D,fa,lamb,alpha):
 
 
 # modulation scheme and constellation points
-#M = [4,4]
-M=[2,2]
+M = [4,4]
+#M=[2,2]
 #mradius=1/3*np.sqrt(2)
 #c2 = (1+mradius*np.array([1,-1j,1j,-1]))/(1+mradius)
 #constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
 #constellation_points = [[ -1,1],[1j,-1j]] # addition
-constellation_points = [[1+1j,1-1j], [1,-1]] # multiplication
-#constellation_points = [[ 0.9999727 +0.00739252j,  0.0061883 +0.9961329j , 0.03276862-0.99794596j, -0.99756783+0.02455366j],[0.93617743-0.3515279j , 0.47354087-0.18245742j, 0.9338867 +0.35331026j, 0.48145026+0.19996208j]]
-precompensate=True
+#constellation_points = [[1+1j,1-1j], [1,-1]] # multiplication
+constellation_points = [[ 0.9999727 +0.00739252j,  0.0061883 +0.9961329j , 0.03276862-0.99794596j, -0.99756783+0.02455366j],[0.93617743-0.3515279j , 0.47354087-0.18245742j, 0.9338867 +0.35331026j, 0.48145026+0.19996208j]]
+precompensate=False
 
 # symbol time and number of symbols    
 t_symb = 3.2*1e-10
@@ -162,7 +162,11 @@ for k in range( n_real ):
             s_sinc[value,:] = cd(s_sinc[value,:],L[value],D,fa,lam,alpha)
             s_gauss[value,:] = cd(s_gauss[value,:],L[value],D,fa,lam,alpha)
 
-
+    for value in range(len(L)):
+     # matched filter
+        s_rect[value,:] = np.fft.ifft( np.fft.fft(rect, len(s_rect[0,:]))* np.fft.fft(s_rect[value,:]))
+        s_sinc[value,:] = np.fft.ifft( np.fft.fft(sinc, len(s_rect[0,:]))* np.fft.fft(s_sinc[value,:]))
+        s_gauss[value,:] =  np.fft.ifft( np.fft.fft(gauss, len(s_rect[0,:]))* np.fft.fft(s_gauss[value,:]))
 
         
     # get spectrum using Bartlett method
@@ -291,12 +295,12 @@ color_list = base.colors
 # plot received constellation
 plt.figure("constellation",figsize=(3,3))
 for x in range(n_symb):
-    plt.scatter(np.real(s_rect[0,x*n_up]), np.imag(s_rect[0,x*n_up]),color=color_list[0], alpha=0.8)
-    plt.scatter(np.real(s_rect[1,x*n_up]), np.imag(s_rect[2,x*n_up]),color=color_list[2], alpha=0.8)
-    plt.scatter(np.real(s_rect[2,x*n_up]), np.imag(s_rect[2,x*n_up]),color=color_list[4], alpha=0.8)
+    plt.scatter(np.real(s_rect[0,(x+2*syms_per_filt)*n_up]), np.imag(s_rect[0,(x+2*syms_per_filt)*n_up]),color=color_list[0], alpha=0.8)
+    plt.scatter(np.real(s_rect[1,(x+2*syms_per_filt)*n_up]), np.imag(s_rect[2,(x+2*syms_per_filt)*n_up]),color=color_list[2], alpha=0.8)
+    plt.scatter(np.real(s_rect[2,(x+2*syms_per_filt)*n_up]), np.imag(s_rect[2,(x+2*syms_per_filt)*n_up]),color=color_list[4], alpha=0.8)
 plt.grid()
 plt.xlabel(r'$\Re\{s(t)\}$')
 plt.ylabel(r'$\Im\{s(t)\}$')
 plt.legend(['L = 0 km','L = 20 km','L = 100 km'], loc='lower right')
 plt.tight_layout()
-plt.savefig(f'dispersion_const_prec.pdf')
+plt.savefig(f'dispersion_const.pdf')

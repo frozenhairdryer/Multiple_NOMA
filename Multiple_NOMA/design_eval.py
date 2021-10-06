@@ -24,15 +24,17 @@ alph1=torch.tensor([1,1])
 
 params=[runs,num_epochs,sigma_n,M,alph]
 
+GMI_freecanc,GMI_dpcanc, best_impl, best_achieved, params = pickle.load( open( "gmis_compare_freevsdp.pkl", "rb" ) )
 
-## NN canceller 
+
+""" ## NN canceller 
 GMI_freecanc=[]
 list_freecanc=[]
 #compare_data.append([])
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec, canc, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph1, plotting=False)
+    _,en, dec, canc, gmi, ser, gmi_exact, snr, const = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.002],canc_method='nn', modradius=alph1, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_freecanc.append(np.sum(g, axis=1))
     list_freecanc.append(ser)
@@ -49,7 +51,7 @@ list_dpcanc=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec, gmi, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='div', modradius=alph, plotting=False)
+    _,en, dec, gmi, ser, gmi_exact, snr, const = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,300,0.005],canc_method='div', modradius=alph, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_dpcanc.append(np.sum(g, axis=1))
     list_dpcanc.append(ser)
@@ -62,7 +64,7 @@ with open('Multiple_NOMA/best_impl_freevsdp.pkl', 'wb') as f:  # Python 3: open(
     pickle.dump([best_impl, best_achieved, params], f)
 with open('Multiple_NOMA/gmis_compare_freevsdp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
     pickle.dump([GMI_freecanc,GMI_dpcanc, best_impl, best_achieved, params], f)
-print("Best implementation achieved with "+best_achieved+" cancellation.")
+print("Best implementation achieved with "+best_achieved+" cancellation.") """
 
 ## figures
 cmap = matplotlib.cm.tab20
@@ -72,7 +74,8 @@ color_list = base.colors
 
 
 #print(np.shape(np.array(GMI_nocanc)))
-plt.figure("Free Learning", figsize=(3,3))
+plt.figure("Free Learning", figsize=(6,2.5))
+plt.subplot(121)
 
 for item in range(runs):
     #plt.plot(list_nocanc[item][0],c=color_list[1], alpha=0.9)
@@ -84,7 +87,7 @@ for item in range(runs):
     #plt.plot(list_nncanc[item][0],c=color_list[9], alpha=0.9)
     #plt.plot(list_nncanc[item][1],c=color_list[11], alpha=0.9)
 
-    plt.plot(GMI_freecanc[item],c=color_list[1],linewidth=1.5, alpha=0.9)
+    plt.plot(GMI_freecanc[item],c=color_list[3],linewidth=1, alpha=0.9)
 
 
 
@@ -110,7 +113,7 @@ for item in range(runs):
 
 
 
-plt.plot(average_freecanc, c=color_list[0],linewidth=2)
+plt.plot(average_freecanc, c=color_list[2],linewidth=2, label='Free Learning')
 #plt.plot(average_nocanc1, c=color_list[2],linewidth=3, label="Enc"+str(1)+" no cancellation")
 #plt.fill_between(np.arange(num_epochs), average_freecanc+var_freecanc,average_freecanc-var_freecanc, color=color_list[0], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nocanc1+var_nocanc1,average_nocanc1-var_nocanc1, color=color_list[2], alpha=0.2)
@@ -119,17 +122,20 @@ plt.plot(average_freecanc, c=color_list[0],linewidth=2)
 #plt.legend(loc=4)
 #plt.yscale('log')
 plt.ylabel('GMI')
+plt.xlabel('epoch')
 plt.grid()
 plt.ylim(0,4)
-plt.tight_layout()
-plt.savefig('Multiple_NOMA/free_learning.pgf')
+plt.xlim(0,100)
+plt.legend(loc=3)
+#plt.tight_layout()
+#plt.savefig('Multiple_NOMA/free_learning.pgf')
 
-
-plt.figure("Design Proposal", figsize=(3,3))
+plt.subplot(122)
+#plt.figure("Design Proposal", figsize=(3,3))
 for item in range(runs):
-    plt.plot(GMI_dpcanc[item],c=color_list[3],linewidth=1.5 ,alpha=0.9)
+    plt.plot(GMI_dpcanc[item],c=color_list[5],linewidth=1 ,alpha=0.9)
 
-plt.plot(average_dpcanc, c=color_list[2], linewidth=2)
+plt.plot(average_dpcanc, c=color_list[4], linewidth=2, label='Design Proposal')
 #plt.plot(average_dcanc1, c=color_list[6], linewidth=3, label="Enc"+str(1)+" division cancellation")
 
 #plt.fill_between(np.arange(num_epochs), average_dpcanc+var_dpcanc,average_dpcanc-var_dpcanc, color=color_list[2], alpha=0.2)
@@ -139,10 +145,14 @@ plt.plot(average_dpcanc, c=color_list[2], linewidth=2)
 #plt.legend(loc=4)
 #plt.yscale('log')
 plt.ylabel('GMI')
+plt.xlabel('epoch')
 plt.ylim(0,4)
+plt.xlim(0,100)
+plt.legend(loc=3)
 plt.grid()
+
 plt.tight_layout()
-plt.savefig('Multiple_NOMA/odesign_prop.pgf')
+plt.savefig('Multiple_NOMA/free_vs_designprop.pgf')
 
 
 plt.show()

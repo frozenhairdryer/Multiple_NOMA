@@ -14,11 +14,11 @@ encs=nn.ModuleList([])
 GMI_serial=[]
 for m in range(len(M)):
     if m==0:
-        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M[0],sigma_n[0],train_params=cp.array([60,300,0.002]),canc_method='div', modradius=mradius[0], plotting=False)
+        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact, snr, const=Multipl_NOMA(M[0],sigma_n[0],train_params=cp.array([60,300,0.002]),canc_method='div', modradius=mradius[0], plotting=False)
     elif m==len(M)-1:
-        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M[0:m+1],sigma_n[0:m+1],train_params=cp.array([60,300,0.002]),canc_method='div', modradius=mradius[0:m+1], plotting=True, encoder=encs[m-1])
+        canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact, snr, const=Multipl_NOMA(M[0:m+1],sigma_n[0:m+1],train_params=cp.array([60,300,0.002]),canc_method='div', modradius=mradius[0:m+1], plotting=True, encoder=encs[m-1])
     else:
-         canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact=Multipl_NOMA(M[0:m+1],sigma_n[0:m+1],train_params=cp.array([60,300,0.002]),canc_method='div', modradius=mradius[0:m+1], plotting=False, encoder=encs[m-1])
+         canc_method,enc_best,dec_best, gmi, validation_SERs,gmi_exact, snr, const=Multipl_NOMA(M[0:m+1],sigma_n[0:m+1],train_params=cp.array([60,300,0.002]),canc_method='div', modradius=mradius[0:m+1], plotting=False, encoder=encs[m-1])
     encs.append(enc_best)
     g = gmi_exact.detach().cpu().numpy()
     GMI_serial.append(g)

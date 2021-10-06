@@ -32,7 +32,7 @@ modr=[]
 for item in range(runs):
     #compare_data[2].append(dir())
     #plt.close('all')
-    _,en, dec, mod, ser, gmi_exact = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,600,0.005],canc_method='div', modradius=alph1, plotting=False)
+    _,en, dec, mod, ser, gmi_exact, snr, const = Multipl_NOMA(M,sigma_n,train_params=[num_epochs,600,0.005],canc_method='div', modradius=alph1, plotting=False)
     g = gmi_exact.detach().cpu().numpy()
     GMI_best.append(np.max(np.sum(g, axis=1)))
     modr.append(mod)
