@@ -3,9 +3,9 @@ from functions import *
 from NN_classes import *
 
 
-def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None):
+def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none', modradius=1, plotting=True, encoder=None, chrom_disp=False):
     """ 
-    Training process of NN autoencoder for multiplicative NOMA
+    Training process of NN autoencoder for multiplicative NOMA including rectangular pulseshaping
 
     train_params=[num_epochs,batches_per_epoch, learn_rate]
     canc_method is the chosen cancellation method:
@@ -15,16 +15,21 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     modradius is the permitted signal amplitude for each encoder
     M, sigma_n, modradius are lists of the same size 
     plotting (bool): toggles Plotting of PDFs into folder /figures 
-    encoder : already trained encoders can be put in front of encoders that still need training
+    chrom_disp : Toggles Simulation of chromatic dispersion
     """
-    
+
+    #torch.autograd.detect_anomaly()
     if M.size()!=sigma_n.size() or M.size()!=modradius.size():
         raise error("M, sigma_n, modradius need to be of same size!")
     
     num_epochs=train_params[0]
     batches_per_epoch=train_params[1]
-    learn_rate =train_params[2]
-    N_valid=10000
+    learn_rate = train_params[2]
+    N_valid = 10000
+    n_up = 15   # upsampling for pulseshaping
+    n_symb_filt = 6  # symbols per filter (plus minus in both directions)
+    
+    cd_length = 100 # km
     
     printing=False #suppresses all pinted output but GMI
     length = np.size(M.detach().cpu().numpy())
@@ -164,7 +169,6 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     gmi = torch.zeros(int(num_epochs),device=device)
     gmi_est2 = torch.zeros(int(num_epochs),device=device)
     gmi_exact = torch.zeros((int(num_epochs), bitnumber), device=device)
-    SNR = np.zeros(int(num_epochs))
     #mradius =[]
 
     for epoch in range(int(num_epochs)):
@@ -179,18 +183,50 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 batch_labels[:,num].random_(int(M[num]))
                 batch_labels_onehot = torch.zeros(int(batch_size_per_epoch[epoch]), int(M[num]), device=device)
                 batch_labels_onehot[range(batch_labels_onehot.shape[0]), batch_labels[:,num].long()]=1
-    
+
                 if num==0:
                     # Propagate (training) data through the first transmitter
-                    modulated = enc[0](batch_labels_onehot)
+                    modulated = torch.view_as_complex(enc[0](batch_labels_onehot))
+                    mod_up, fa ,Filt= pulseshape(modulated,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length)
+                    MFilt = Filt
                     # Propagate through channel 1
-                    received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
-                    # received = channel(modulated, sigma_n[num])
+                    rec_up = channel_apply(mod_up, fa, sigma_n[num],n_up, cd=chrom_disp, L=cd_length/length)
+                    #print(rec_up[0:100])
+                    #received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                    
                 else:
-                    modulated = torch.view_as_real(torch.view_as_complex(received)*((torch.view_as_complex(enc[num](batch_labels_onehot)))))
-                    received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
+                    #s = modulated*torch.view_as_complex(enc[num](batch_labels_onehot))
+                    modulated = (torch.view_as_complex(enc[num](batch_labels_onehot)))
+                    mod_up, fa, MFilt = pulseshape(modulated,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length*(length-num)/length)
+                    #MFilt = MFilt#/np.sqrt(np.sqrt(n_up))  
+                    rec_up = channel_apply(mod_up*rec_up*np.sqrt(n_up), fa, sigma_n[num],n_up, cd=chrom_disp, L=cd_length/length)
+                    #print(rec_up[0:100])
+                    
+                    #print(rec_up)
+                    #received = torch.add(modulated, 0.5*sigma_n[num]*torch.randn(len(modulated),2).to(device))
                 
                 if num==length-1:
+                    # receive filter
+                    #print(rec_up[0:100])
+                    #time corr pulseshaping
+                    rec_up = torch.roll(rec_up, -int(n_up*n_symb_filt))
+
+                    rec_up = torch.fft.ifft(torch.multiply(torch.fft.fft(rec_up), MFilt))
+                    #time corr receive filter
+                    rec_up = torch.roll(rec_up, -int(n_up*n_symb_filt))
+                    # downsampling
+                    #print(rec_up[0:100])
+                    
+                    #print(rec_up[0:100])
+                    received = torch.view_as_real(rec_up[::n_up]).type(torch.float32)
+                    #print(received[0:20])
+                    #print(rec_up[0:100])
+                    #print(received)
+                    #received = torch.cat([received[n_symb:len(received)-(n_symb)]]).type(torch.float32)
+                    #print(received[0:20])
+
+                    #print(s[0:20])
+                    # Decoding
                     if canc_method=='none':
                         for dnum in range(length):
                             decoded[dnum]=(dec[dnum](received))
@@ -242,7 +278,12 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
 
             # compute gradients
             loss.backward()
-
+            #for p in enc[0].parameters():
+            #    print("enc "+str(p.grad))
+            #for p in dec[0].parameters():
+            #    print("dec "+str(p.grad))
+            #print(rec_up.grad)
+            
             # run optimizer
             for const in range(length):
                 for elem in optimizer[const]:
@@ -261,24 +302,40 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             if plotting==True:
                 cvalid = torch.zeros(N_valid)
             decoded_valid=torch.zeros((int(length),N_valid,int(torch.max(M))), dtype=torch.float32, device=device)
-            #SNR = torch.zeros(int(length), device=device)
+            SNR = torch.zeros(int(length), device=device)
             for num in range(length):
                 y_valid_onehot = torch.eye(M[num], device=device)[y_valid[:,num]]
                 
                 if num==0:
-                    encoded = enc[num](y_valid_onehot).to(device)
-                    #SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[0]))
-                    channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    encoded = torch.view_as_complex(enc[num](y_valid_onehot)).to(device)
+                    SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/float(sigma_n[0]))
+                    enc_up, fa, Filt = pulseshape(encoded,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length*(length-num)/length)
+                    # Propagate through channel 1
+                    ch_up = channel_apply(enc_up, fa, sigma_n[num],n_up, cd=chrom_disp, L=cd_length/length)
+                    MFilt = Filt
+                    #channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     # color map for plot
                     if plotting==True:
                         cvalid=y_valid[:,num]
                 else:
-                    encoded = torch.view_as_real(torch.view_as_complex(channel)*(torch.view_as_complex(enc[num](y_valid_onehot))))
-                    #SNR[num] = 20*torch.log10(torch.mean(torch.abs(torch.view_as_complex(encoded)))/float(sigma_n[num]))
-                    channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
+                    encoded = torch.view_as_complex(enc[num](y_valid_onehot))
+                    SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/float(sigma_n[num]))
+                    enc_up, fa, Filt = pulseshape(encoded,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length*(length-num)/length)
+                    MFilt = Filt#/np.sqrt(np.sqrt(n_up))  
+                    ch_up =channel_apply(enc_up*ch_up*np.sqrt(n_up), fa, sigma_n[num], n_up, cd=chrom_disp, L=cd_length/length)
+                    #channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))
                     #color map for plot
                     if plotting==True:
                         cvalid= cvalid+int(M[num])*y_valid[:,num]
+                if num==length-1:
+                    # corr pulseshaping
+                    ch_up = torch.roll(ch_up, -int(n_up*n_symb_filt))
+                    ## receive filter
+                    ch_up = torch.fft.ifft(torch.multiply(torch.fft.fft(ch_up),MFilt))
+                    # corr receive filter
+                    ch_up = torch.roll(ch_up, -int(n_up*n_symb_filt))
+                    channel = torch.view_as_real(ch_up[::n_up]).type(torch.float32)
+                    #channel = torch.cat([channel[n_symb:len(channel)-n_symb]]).type(torch.float32)
                 if num==length-1 and canc_method=='none':
                         for dnum in range(length):
                             decoded_valid[dnum]=dec[dnum](channel)
@@ -316,7 +373,7 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
                 if validation_SERs[num][epoch]>0.5 and epoch>10:
                     #Weight is increased, when error probability is higher than symbol probability -> misclassification 
                     weight[num] += 1
-                gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],(softmax(decoded_valid[num])), y_valid[:,num])
+                gmi_exact[epoch][num*int(torch.log2(M[num])):(num+1)*int(torch.log2(M[num]))]=GMI(M[num],softmax(decoded_valid[num]), y_valid[:,num])
             weight=weight/torch.sum(weight)*length # normalize weight sum
             gmi[epoch], t =GMI_est(validation_SERs[:,epoch],M,validation_BER[epoch])
             gmi_est2[epoch] = torch.sum(t)
@@ -343,35 +400,15 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
             
             validation_received.append(cp.asarray(channel.detach()))
 
-            constellation_base = []
-            for num in range(length):
-                constellation_base.append(torch.view_as_complex(enc[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
+    constellation_base = []
+    for num in range(length):
+        constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())
 
-            constellations = cp.asarray(constellation_base[0])
-            for num in range(length-1):
-                constellationsplus = cp.asarray(constellation_base[num+1])
-                constellations = cp.kron(constellations,constellationsplus)
-
-            for num in range(length):
-                if num==0:
-                    N0 = sigma_n.detach().cpu().numpy()[num]**2
-                else:
-                    N0 *= np.mean(np.abs(constellation_base[num])**2)
-                    N0 += sigma_n.detach().cpu().numpy()[num]**2
-            
-            SNR[epoch] = 10*np.log10(np.mean(np.abs(constellations)**2)/(N0+1e-9))
-
-    
-
-    
 
     if plotting==True:
         decision_region_evolution = []
         # constellations only used for plotting
-        constellation_base = []
-        for num in range(length):
-            constellation_base.append(torch.view_as_complex(enc_best[num](torch.eye(int(M[num]), device=device))).cpu().detach().numpy())      
-        
+                
         constellations = cp.asarray(constellation_base[0])
         for num in range(length-1):
             constellationsplus = cp.asarray(constellation_base[num+1])
@@ -414,18 +451,16 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
         C, r2 = miniball.get_bounding_ball(S) # find smallest circle that contains all constellation points of that encoder
         #idx = np.argmax(np.abs(1+constellation_base[x]))
         #modr_eff[x] = np.abs(constellation_base[x][idx]*(C[0]+1j*C[1])/np.sqrt(r2))
-        #if np.abs(C[0]+1j*C[1])<0.5: # limiting modradius at 1 to prevent overlap
-        modr_eff[x] = np.sqrt(r2) # only measure r
-        #else:
-        #    modr_eff[x] = np.sqrt(r2)/np.abs(C[0]+1j*C[1])
+        if np.abs(C[0]+1j*C[1])<0.5: # limiting modradius at 1 to prevent overlap
+            modr_eff[x] = np.sqrt(r2)
+        else:
+            modr_eff[x] = np.sqrt(r2)/np.abs(C[0]+1j*C[1])
 
     print('Effective Modradius for each Encoder is: '+str(modr_eff))
-    max_GMI = np.argmax(np.sum(gmi_exact.detach().cpu().numpy(), axis=1))
-    print('SNR is '+str(SNR[max_GMI])+' dB')
     #print(constellation_base)
     if plotting==True:
         plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     if canc_method=='nn':
-        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asnumpy(constellations))
+        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact)
     else:
-        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asnumpy(constellations))
+        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact)

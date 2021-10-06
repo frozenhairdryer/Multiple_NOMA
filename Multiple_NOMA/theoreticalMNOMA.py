@@ -343,6 +343,3 @@ def t_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none
 
 
 
-M=torch.tensor([4,4], dtype=int)
-sigma_n=torch.tensor([0.18,0.18], dtype=float)
-t_Multipl_NOMA(M,sigma_n,train_params=cp.array([50,300,0.002]),canc_method='nn', modradius=torch.tensor([1,1/3*np.sqrt(2)],device=device), plotting=True)

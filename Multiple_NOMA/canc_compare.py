@@ -24,7 +24,7 @@ alph=torch.tensor([1,1])
 params=[runs,num_epochs,sigma_n,M,alph]
 
 ## load if already simulated
-#GMI_nocanc,GMI_divcanc,GMI_nncanc, best_impl, best_achieved, params = pickle.load( open( "cancel_compare.pkl", "rb" ) )
+GMI_nocanc,GMI_divcanc,GMI_nncanc, best_impl, best_achieved, params = pickle.load( open( "cancel_compare.pkl", "rb" ) )
 #GMI_nncanc, best_impl, best_achieved, params = pickle.load( open( "cancel_compare.pkl", "rb" ) )
 
 num_epochs= params[1]

@@ -3,10 +3,31 @@ from imports import *
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def SER(predictions, labels):
+    """Calculates Hard decision SER
+    
+    Args:
+    predictions (float): NN autoencoder output; prediction one-hot vector for symbols
+    labels (int): actually sent symbols (validation symbols)   
+
+    Returns:
+        SER (float) : Symbol error rate
+
+    """
     s2 = torch.argmax(predictions, 1)
     return torch.sum( s2!= labels)/predictions.shape[0]
 
 def BER(predictions, labels,m):
+    """Calculates Hard decision bit error rate
+    
+    Args:
+    predictions (float): NN autoencoder output; prediction one-hot vector for symbols
+    m (int): number of modulation symbols per user
+    labels (int): actually sent symbols (validation symbols)   
+
+    Returns:
+        ber (float) : bit error rate
+
+    """
     # Bit representation of symbols
     binaries = torch.tensor(cp.reshape(cp.unpackbits(cp.arange(0,m,dtype='uint8')), (-1,8)), device=device)
     binaries = binaries[:,int(8-torch.log2(m)):]
@@ -17,6 +38,21 @@ def BER(predictions, labels,m):
     return ber
 
 def GMI_est(SERs, M, ber=None):
+    """Estimates of Generalized mutual information: lower bound
+     * Estimation from SERs only
+     * Estimation from hard decision BERs
+    
+    Args:
+    SERs (float): Symbol error rates
+    M ( int): number of modulation symbols per user
+    ber (int): Bit error rates    
+
+    Returns:
+        gmi_est : Estimation of GMI from SERs
+    may return:
+        gmi : Estimation of GMI from BERs
+
+    """
     # gmi estimate 1 or both estimates, if bers are given
     gmi_est=0
     if M.any()==1:
@@ -36,43 +72,69 @@ def GMI_est(SERs, M, ber=None):
         return gmi_est
 
 def GMI(M, my_outputs, mylabels):
-    # gmi estimate or calculation, if bers are given
-    if mylabels!=None and my_outputs!=None:
-        gmi=torch.zeros(int(torch.log2(M)), device=device)
-        binaries = torch.tensor(cp.reshape(cp.unpackbits(cp.arange(0,M,dtype='uint8')), (-1,8)),dtype=torch.float32, device=device)
-        binaries = binaries[:,int(8-torch.log2(M)):]
-        b_labels = binaries[mylabels].int()
-        # calculate bitwise estimates
-        bitnum = int(torch.log2(M))
-        b_estimates = torch.zeros(len(my_outputs),bitnum, device=device)
-        P_sym = torch.bincount(mylabels)/len(mylabels)
-        for bit in range(bitnum):
-            pos_0 = torch.where(binaries[:,bit]==0)[0]
-            pos_1 = torch.where(binaries[:,bit]==1)[0]
-            est_0 = torch.sum(torch.index_select(my_outputs,1,pos_0), axis=1) +1e-12
-            est_1 = torch.sum(torch.index_select(my_outputs,1,pos_1), axis=1) +1e-12 # increase stability
-            #print(my_outputs)
-            llr = torch.log(est_0/est_1+1e-12)
-            gmi[bit]=1-1/(len(llr))*torch.sum(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1+1e-12), axis=0)
-        return gmi.flatten()
+    """Calculation of Generalized mutual information
+    
+    Args:
+    M ( int): number of modulation symbols per user
+    my_outputs (float): Symbol probabilities
+    mylabels (int): validation labels of sent symbols    
 
-def chromatic_dispersion(sigIN,fa):
-    #applies chromatic dispersion to the signal
+    Returns:
+        r_signal: signal after channel, still upsampled
+
+    """
+    # gmi calculation
+    gmi=torch.zeros(int(torch.log2(M)), device=device)
+    binaries = torch.tensor(cp.reshape(cp.unpackbits(cp.arange(0,M,dtype='uint8')), (-1,8)),dtype=torch.float32, device=device)
+    binaries = binaries[:,int(8-torch.log2(M)):]
+    b_labels = binaries[mylabels].int()
+    # calculate bitwise estimates
+    bitnum = int(torch.log2(M))
+    b_estimates = torch.zeros(len(my_outputs),bitnum, device=device)
+    P_sym = torch.bincount(mylabels)/len(mylabels)
+    for bit in range(bitnum):
+        pos_0 = torch.where(binaries[:,bit]==0)[0]
+        pos_1 = torch.where(binaries[:,bit]==1)[0]
+        est_0 = torch.sum(torch.index_select(my_outputs,1,pos_0), axis=1) +1e-12 
+        est_1 = torch.sum(torch.index_select(my_outputs,1,pos_1), axis=1) +1e-12 # increase stability
+        #print(my_outputs)
+        llr = torch.log(est_0/est_1)
+        gmi[bit]=1-1/(len(llr))*torch.sum(torch.log2(torch.exp((2*b_labels[:,bit]-1)*llr)+1+1e-12), axis=0)
+    return gmi.flatten()
+
+def chromatic_dispersion(sigIN,fa,L):
+    """Apply Chromatic dispersion
+    Chromatic dispersion is applied in frequency domain. 
+    Args:
+    sigIN (complex): upsampled input signal (time domain)
+    fa (float): sampling frequency fa=n_up*1/t_symb
+    L (float): length of fiber in km 
+
+    Parameters:
+    c0 : Speed of light in m/s
+    alpha : Fiber attenuation
+    lam : carrier wavelength
+    D : dispersion coefficient in ps/nm/km
+
+    Returns:
+        sigOUT: upsampled output signal (time domain)
+
+    """
     c0 = 299792458                                              # in m/s
     alpha = 0                                                   # 10**(0/10) # Attenuation approx 0.2 [1/km] 
     lam = 1550e-9                                               # wavelength, [nm]
     D = 20                                                      # [ps/nm/km]
-    beta2 = - (D * np.square(lam)) / (2 * np.pi * 3e8) * 1e-3   # [s^2/km] propagation constant, lambda=1550nm is standard single-mode wavelength
-    L = 50                                                      # in km
-    sigINf = np.fft.fftshift(np.fft.fft(sigIN))
-    f=np.linspace(-1/2,1/2,(len(sigIN)))*fa
+    beta2 = - (D * np.square(lam)) / (2 * np.pi * c0) * 1e-3   # [s^2/km] propagation constant, lambda=1550nm is standard single-mode wavelength
+    #L = 50                                                      # in km
+    sigINf = torch.fft.fftshift(torch.fft.fft(sigIN))
+    f=torch.linspace(-1/2,1/2,(len(sigIN)))*fa
     
-    HCD = np.exp(( - 1j * beta2 / 2 * np.square(2*np.pi*f)) * L - alpha / 2 * L )
+    HCD = torch.exp(( - 1j * beta2 / 2 * torch.square(2*np.pi*f)) * L - alpha / 2 * L ).to(device)
     sigOUTf = sigINf*HCD
-    sigOUT = np.fft.ifft(np.fft.ifftshift(sigOUTf))
+    sigOUT = torch.fft.ifft(torch.fft.ifftshift(sigOUTf))
     return sigOUT
 
-def channel(signal, fa, sigma, cd=False):
+def channel_apply(signal, fa, sigma, n_up, cd=False, L=0):
     """Channel Simulation
     Upsampled signal is processed according to noise, Chromatic dispersion parameters
     Args:
@@ -84,18 +146,21 @@ def channel(signal, fa, sigma, cd=False):
         r_signal: signal after channel, still upsampled
 
     """
-    if cd == True:
-        signal = chromatic_dispersion(signal, fa)
     r_signal = torch.add(signal, (0.5*sigma*torch.randn(len(signal)).to(device)+ 1j*0.5*sigma*torch.randn(len(signal)).to(device)))
+    if cd == True:
+        r_signal = chromatic_dispersion(r_signal, fa,L)
+    
     return r_signal
 
-def pulseshape(samples, n_up, shape='rect'):
+def pulseshape(samples, n_up,syms_per_filt, shape='rect', cd=False, L=0):
     """Pulse Shaping
     Upsample signal and apply pulseshape 'shape'
     Args:
     samples (complex): signal samples
     n_up (int): Upsampling factor
-    shape (str): pulse shape, supported: 'rect', 'sinc'    
+    shape (str): pulse shape, supported: 'rect', 'sinc'
+    cd (bool): toggles pre-compensation for chromatic dispersion
+    L (float): fiber length to receiver in km    
 
     Returns:
         r_signal: signal after pulseshaping
@@ -103,30 +168,84 @@ def pulseshape(samples, n_up, shape='rect'):
 
     """
     t_symb = 3.2*1e-10     # Symbol duration for optical fiber
-    syms_per_filt = 6      # symbols per filter (plus minus in both directions)
+    #syms_per_filt = 6      # symbols per filter (plus minus in both directions)
     K_filt = 2 * syms_per_filt * n_up + 1         # length of the fir filter
     fa = 1/t_symb*n_up
     if shape!='rect' and shape!='sinc':
         raise ValueError("Variable shape can only take 'rect', 'rc' or 'sinc'!")
     
+    s_up = torch.zeros( len(samples)*n_up).type(torch.complex64).to(device)    
+    s_up[ : : n_up ] = samples
+    S = torch.fft.fft(s_up)
+
     if shape=='sinc':
         pulse = np.sinc(np.linspace(-syms_per_filt,syms_per_filt, K_filt))
         pulse /= np.max(pulse)
+        Pulse = torch.from_numpy(np.fft.fft(pulse, len(S))).to(device)
 
     if shape=='rect':
-        pulse = np.append( np.ones( n_up ), np.zeros( K_filt - n_up ) )
-        pulse /= np.max(pulse)
+        pulse = np.append( np.ones( n_up , dtype=complex), np.zeros( K_filt - n_up ,dtype=complex) )
+        pulse /= np.sqrt(n_up)#np.max(pulse)
+        #print(np.linalg.norm(np.real(pulse)))
+        #print(np.sqrt(n_up))
+        #pulse /= np.sqrt(np.sqrt(n_up))
+        #power = np.sum(pulse**2)
+        
         pulse = np.roll(pulse,int((K_filt-n_up)/2))
+        Pulse = torch.from_numpy(np.fft.fft(pulse, len(S))).to(device)
     
-    s_up = np.zeros( len(samples) * n_up , dtype=complex)      
-    s_up[ : : n_up ] = samples
-    r_signal = np.convolve(samples, pulse)
-    return r_signal, fa
+
+    if cd==True:
+        impulse = torch.zeros(len(S)).to(device)
+        impulse[0]=1
+        hcd=chromatic_dispersion(impulse, fa, -L)
+        R_signal = S*Pulse#*torch.fft.fft(hcd, len(S))
+    else:
+        R_signal = S*Pulse
+
+    r_signal = torch.fft.ifft(R_signal) # implement convolution as multiplication in frequ. domain -> autograd
+    #pulseshaper = torch.nn.Conv1d(len(s_up),len(s_up),len(pulse))
+    #pulseshaper.weight(pulse)
+    #r_signal = pulseshaper(samples)
+    #r = np.convolve(pulse, s_up)
+    #r_signal = torch.from_numpy(r).to(device)
+    #print(r_signal[15*5:30*6])
+    #rpulse = torch.zeros(len(S)).to(device)#Pulse/n_up
+    #rpulse[int((K_filt-1)/2)] = 1
+    rPulse =Pulse#torch.fft.fft(rpulse)
+    return r_signal, fa, rPulse
 
 
 
 
-def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolution, meshgrid, constellation_base, gmi_exact, gmi_hd):
+def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolution, meshgrid, constellation_base, gmi_exact, gmi_hd=None):
+    """Creates mutliple plots in /figures for the best implementation
+    
+    Args:
+    SERs (float): Hard-decision Symbol error rates
+    valid_r (float, float) : Received signal (decoder input) 
+    cvalid (int) : integer specifying symbol number (range is 0...M_all) -> colorcoded symbols 
+    M (int): number of modulation symbols per user
+    const (complex), len=M_all : resulting constellation (channel input)
+    GMIs_appr (float) : GMI estimate from SERs
+    decision_region_evolution (int) : grid containing ints denoting the corresponding symbol
+    meshgrid (float): grid on which decision_region_evolution is based
+    constellation_base (complex) [len(M)]: contains all possible outputs for all encoders
+    gmi_exact (float): GMI calculated from LLRs -> exact value 
+       
+    Plots:
+     * SERs vs. epoch
+     * GMIs (gmi_exact) vs. epoch
+     * scatterplot const
+     * scatterplot valid_r as complex number
+     * scatterplot complex decision regions together with received signal
+     * scatterplots for base constellations
+
+    Returns:
+        none
+
+    """
+    
     matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
     'font.family': 'serif',
@@ -181,7 +300,6 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.annotate('Max', (0.95*argmax(t),0.9*max(t)),c='red')
     plt.xlabel('epoch no.')
     plt.ylabel('GMI')
-    plt.xlim(0,len(t)-1)
     plt.ylim(0,4)
     plt.legend(loc=3)
     plt.grid(which='both')
@@ -199,7 +317,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     for h in helper:
         bitmapping.append(format(h, '04b'))
 
-    plt.figure("constellation", figsize=(3,2.5))
+    plt.figure("constellation", figsize=(3,3))
     #plt.subplot(121)
     plt.scatter(np.real(constellations),np.imag(constellations),c=range(np.product(M.cpu().detach().numpy())), cmap='tab20',s=50)
     for i in range(len(constellations)):
@@ -208,10 +326,10 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$')
     plt.ylabel(r'$\Im\{r\}$')
-    plt.xlim((-1.2,1.2))
-    plt.ylim((-1.2,1.2))
+    plt.xlim((-1.5,1.5))
+    plt.ylim((-1.5,1.5))
     plt.grid(which='both')
-    #plt.title('Constellation')
+    plt.title('Constellation')
     plt.tight_layout()
     plt.savefig("Multiple_NOMA/figures/constellation.pdf")
     #tikzplotlib.save("figures/constellation.tex", strict=True, externalize_tables=True, override_externals=True)
