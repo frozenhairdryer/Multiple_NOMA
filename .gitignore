@@ -1,6 +1,9 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python,jupyternotebooks,images
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,jupyternotebooks,images
 
+figures/
+back_data/
+
 ### Images ###
 # JPEG
 *.jpg
@@ -65,6 +68,9 @@
 # 3D Images
 *.3dm
 *.max
+
+# pgf files
+*.pgf
 
 ### JupyterNotebooks ###
 # gitignore template for Jupyter Notebooks
@@ -224,6 +230,7 @@ Thumbs.db
 
 # profiling data
 .prof
+
 
 
 # End of https://www.toptal.com/developers/gitignore/api/python,jupyternotebooks,images
