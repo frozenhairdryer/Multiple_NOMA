@@ -172,8 +172,14 @@ for k in range( n_real ):
             s_sinc = s_sinc * np.convolve( sinc, s_up_sinc)
             s_gauss = s_gauss * np.convolve( gauss, s_up_gauss)
 
+    
+    # matched filter
+    s_rect = np.fft.ifft( np.fft.fft(rect, len(s_rect))* np.fft.fft(s_rect))
+    s_sinc = np.fft.ifft( np.fft.fft(sinc**2, len(s_rect))* np.fft.fft(s_sinc))
+    s_gauss = np.fft.ifft( np.fft.fft(gauss, len(s_rect))* np.fft.fft(s_gauss))
 
-        
+
+
     # get spectrum using Bartlett method
     S_rc[k, :] = np.fft.fftshift( np.fft.fft( s_rc, N_fft ) )
     S_rect[k, :] = np.fft.fftshift( np.fft.fft( s_rect, N_fft ) )
@@ -307,7 +313,7 @@ color_list = base.colors
 # plot received constellation
 plt.figure("constellation",figsize=(3,3))
 for x in range(n_symb):
-    plt.scatter(np.real(s_gauss[(x+syms_per_filt)*n_up]), np.imag(s_gauss[(x+syms_per_filt)*n_up]),color=color_list[0], alpha=0.8)
+    plt.scatter(np.real(s_sinc[(x+2*syms_per_filt)*n_up]), np.imag(s_sinc[(x+syms_per_filt)*n_up]),color=color_list[0], alpha=0.8)
 plt.grid()
 plt.xlabel(r'$\Re\{s(t)\}$')
 plt.ylabel(r'$\Im\{s(t)\}$')

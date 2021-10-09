@@ -18,6 +18,9 @@ def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_metho
     chrom_disp : Toggles Simulation of chromatic dispersion
     """
 
+    cd_comp=chrom_disp
+    cd_length = 100 # km
+
     #torch.autograd.detect_anomaly()
     if M.size()!=sigma_n.size() or M.size()!=modradius.size():
         raise error("M, sigma_n, modradius need to be of same size!")
@@ -29,7 +32,6 @@ def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_metho
     n_up = 15   # upsampling for pulseshaping
     n_symb_filt = 6  # symbols per filter (plus minus in both directions)
     
-    cd_length = 100 # km
     
     printing=False #suppresses all pinted output but GMI
     length = np.size(M.detach().cpu().numpy())
@@ -187,7 +189,7 @@ def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_metho
                 if num==0:
                     # Propagate (training) data through the first transmitter
                     modulated = torch.view_as_complex(enc[0](batch_labels_onehot))
-                    mod_up, fa ,Filt= pulseshape(modulated,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length)
+                    mod_up, fa ,Filt= pulseshape(modulated,n_up,n_symb_filt,shape='rect', cd=cd_comp, L=cd_length)
                     MFilt = Filt
                     # Propagate through channel 1
                     rec_up = channel_apply(mod_up, fa, sigma_n[num],n_up, cd=chrom_disp, L=cd_length/length)
@@ -197,7 +199,7 @@ def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_metho
                 else:
                     #s = modulated*torch.view_as_complex(enc[num](batch_labels_onehot))
                     modulated = (torch.view_as_complex(enc[num](batch_labels_onehot)))
-                    mod_up, fa, MFilt = pulseshape(modulated,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length*(length-num)/length)
+                    mod_up, fa, MFilt = pulseshape(modulated,n_up,n_symb_filt,shape='rect', cd=cd_comp, L=cd_length*(length-num)/length)
                     #MFilt = MFilt#/np.sqrt(np.sqrt(n_up))  
                     rec_up = channel_apply(mod_up*rec_up*np.sqrt(n_up), fa, sigma_n[num],n_up, cd=chrom_disp, L=cd_length/length)
                     #print(rec_up[0:100])
@@ -309,7 +311,7 @@ def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_metho
                 if num==0:
                     encoded = torch.view_as_complex(enc[num](y_valid_onehot)).to(device)
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/float(sigma_n[0]))
-                    enc_up, fa, Filt = pulseshape(encoded,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length*(length-num)/length)
+                    enc_up, fa, Filt = pulseshape(encoded,n_up,n_symb_filt,shape='rect', cd=cd_comp, L=cd_length*(length-num)/length)
                     # Propagate through channel 1
                     ch_up = channel_apply(enc_up, fa, sigma_n[num],n_up, cd=chrom_disp, L=cd_length/length)
                     MFilt = Filt
@@ -320,7 +322,7 @@ def waveform_Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_metho
                 else:
                     encoded = torch.view_as_complex(enc[num](y_valid_onehot))
                     SNR[num] = 20*torch.log10(torch.mean(torch.abs(encoded))/float(sigma_n[num]))
-                    enc_up, fa, Filt = pulseshape(encoded,n_up,n_symb_filt,shape='rect', cd=chrom_disp, L=cd_length*(length-num)/length)
+                    enc_up, fa, Filt = pulseshape(encoded,n_up,n_symb_filt,shape='rect', cd=cd_comp, L=cd_length*(length-num)/length)
                     MFilt = Filt#/np.sqrt(np.sqrt(n_up))  
                     ch_up =channel_apply(enc_up*ch_up*np.sqrt(n_up), fa, sigma_n[num], n_up, cd=chrom_disp, L=cd_length/length)
                     #channel = torch.add(encoded, float(0.5*sigma_n[num])*torch.randn(len(encoded),2).to(device))

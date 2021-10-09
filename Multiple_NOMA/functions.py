@@ -199,7 +199,7 @@ def pulseshape(samples, n_up,syms_per_filt, shape='rect', cd=False, L=0):
         impulse = torch.zeros(len(S)).to(device)
         impulse[0]=1
         hcd=chromatic_dispersion(impulse, fa, -L)
-        R_signal = S*Pulse#*torch.fft.fft(hcd, len(S))
+        R_signal = S*Pulse*torch.fft.fft(hcd, len(S))
     else:
         R_signal = S*Pulse
 
@@ -301,6 +301,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.xlabel('epoch no.')
     plt.ylabel('GMI')
     plt.ylim(0,4)
+    plt.xlim(0,59)
     plt.legend(loc=3)
     plt.grid(which='both')
     plt.title('GMI on Validation Dataset')
@@ -317,7 +318,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     for h in helper:
         bitmapping.append(format(h, '04b'))
 
-    plt.figure("constellation", figsize=(3,3))
+    plt.figure("constellation", figsize=(3,2.5))
     #plt.subplot(121)
     plt.scatter(np.real(constellations),np.imag(constellations),c=range(np.product(M.cpu().detach().numpy())), cmap='tab20',s=50)
     for i in range(len(constellations)):
@@ -326,10 +327,10 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.axis('scaled')
     plt.xlabel(r'$\Re\{r\}$')
     plt.ylabel(r'$\Im\{r\}$')
-    plt.xlim((-1.5,1.5))
-    plt.ylim((-1.5,1.5))
+    plt.xlim((-1.2,1.2))
+    plt.ylim((-1.2,1.2))
     plt.grid(which='both')
-    plt.title('Constellation')
+    #plt.title('Constellation')
     plt.tight_layout()
     plt.savefig("Multiple_NOMA/figures/constellation.pdf")
     #tikzplotlib.save("figures/constellation.tex", strict=True, externalize_tables=True, override_externals=True)

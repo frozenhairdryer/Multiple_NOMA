@@ -14,7 +14,7 @@ import matplotlib
 #matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",
-    #'font.family': 'serif',
+    'font.family': 'serif',
     'text.usetex': True,
     'pgf.rcfonts': False,
     'font.size':8
@@ -44,12 +44,12 @@ M=[2,2]
 #mradius=1/3*np.sqrt(2)
 #c2 = (1+mradius*np.array([1,-1j,1j,-1]))/(1+mradius)
 #constellation_points = [[ -1, 1, 1j,-1j ],[1.+0.j, 0.67962276-0.32037724j,0.67962276+0.32037724j, 0.35924552+0.j ]]
-#constellation_points = [[ -1,1],[1j,-1j]] # addition
-constellation_points = [ [1+1j,1-1j],[1j,-1j]] # multiplication
+constellation_points = [[ -1,1],[1j,-1j]] # addition
+#constellation_points = [ [1,-1],[1+1j,1-1j]] # multiplication
 #constellation_points = [[ 0.9999727 +0.00739252j,  0.0061883 +0.9961329j , 0.03276862-0.99794596j, -0.99756783+0.02455366j],[0.93617743-0.3515279j , 0.47354087-0.18245742j, 0.9338867 +0.35331026j, 0.48145026+0.19996208j]]
-precompensate=True
-#L = np.array([0,20,40,50])                                      # propagation distance in km
-L = np.array([0,50]) 
+precompensate=False
+L = np.array([0,20,40,50])                                      # propagation distance in km
+#L = np.array([0,50]) 
 
 # symbol time and number of symbols    
 t_symb = 3.2*1e-10                                         # 320 ps -> 4*3.125 Gbit/s
@@ -86,7 +86,7 @@ sinc /= np.linalg.norm( sinc )
 rect = np.append( np.ones( n_up ), np.zeros( len( sinc ) - n_up ) )
 rect /= np.linalg.norm( rect )
 rect = np.roll(rect,int((len(rect)-n_up)/2))
-#rect = rect*np.max(rect) # get the same pulse amplitude than for multiplication  
+rect = rect*np.max(rect) # get the same pulse amplitude than for multiplication  
 
 t = np.linspace(-syms_per_filt,syms_per_filt, K_filt)
 gauss = np.exp(-2.5*(np.linspace(-syms_per_filt,syms_per_filt, K_filt)**2))
@@ -161,13 +161,13 @@ for num in range(len(M)):
                 ps_sinc = cd(np.convolve( sinc, s_up_rect),L[value],-D,fa,lam,alpha)
                 ps_gauss = cd(np.convolve( gauss, s_up_rect),L[value],-D,fa,lam,alpha)
 
-                s_rect[value,:] = s_rect[value,:] * ps_rect
-                s_sinc[value,:] = s_sinc[value,:] * ps_sinc
-                s_gauss[value,:] = s_gauss[value,:] * ps_gauss
+                s_rect[value,:] = s_rect[value,:] + ps_rect
+                s_sinc[value,:] = s_sinc[value,:] + ps_sinc
+                s_gauss[value,:] = s_gauss[value,:] + ps_gauss
             else:
-                s_rect[value,:] = s_rect[value,:] * np.convolve( rect, s_up_rect)
-                s_sinc[value,:] = s_sinc[value,:] * np.convolve( sinc, s_up_rect)
-                s_gauss[value,:] = s_gauss[value,:] * np.convolve( gauss, s_up_rect)
+                s_rect[value,:] = s_rect[value,:] + np.convolve( rect, s_up_rect)
+                s_sinc[value,:] = s_sinc[value,:] + np.convolve( sinc, s_up_rect)
+                s_gauss[value,:] = s_gauss[value,:] + np.convolve( gauss, s_up_rect)
             if L[value]==50:
                 F3f=np.fft.fft(s_rect[value])
             
@@ -181,7 +181,8 @@ for num in range(len(M)):
 
 for value in range(len(L)):
      # matched filter
-     s_rect[value,:] = np.fft.ifft( np.fft.fft(rect, len(s_rect[0,:]))* np.fft.fft(s_rect[value,:]))
+     s_rect[value,:] = np.fft.ifft( np.fft.fft(rect/np.sqrt(max(rect)), len(s_rect[0,:]))* np.fft.fft(s_rect[value,:])) #addition
+     #s_rect[value,:] = np.fft.ifft( np.fft.fft(rect, len(s_rect[0,:]))* np.fft.fft(s_rect[value,:]))
      s_sinc[value,:] = np.fft.ifft( np.fft.fft(sinc, len(s_rect[0,:]))* np.fft.fft(s_sinc[value,:]))
      s_gauss[value,:] =  np.fft.ifft( np.fft.fft(gauss, len(s_rect[0,:]))* np.fft.fft(s_gauss[value,:]))
      if L[value]==50:
@@ -251,6 +252,7 @@ def plot_eye(eye, station, num,L,figure=None):
     time = (np.arange(eye.shape[1])-eye.shape[1]//2)
     time = time/np.max(time)*t_symb
 
+
     ax1 = figure.add_subplot(2,1,1)
     #plt.subplot(121)
     ax1.plot(time, np.real(eye.T), color = 'C0', alpha = 0.4, linewidth=1)
@@ -278,73 +280,128 @@ def plot_eye(eye, station, num,L,figure=None):
     # plt.contourf(heatmap_cum, levels = ps, cmap = 'viridis')
     # plt.colorbar()
 
-def plot_eye2(eye, station, num,L,figure=None):
-    heatmap = np.vstack([np.histogram(eye[:,j], bins = np.linspace(-2,2,100))[0]/eye.shape[0] for j in np.arange(eye.shape[1])]).T
+def plot_eye2(eye_all,L,figure=None):
+    #figure= plt.figure("Eyediagram",figsize = (6,8),constrained_layout=True, facecolor = 'w')
+    #subfigs = figure.subfigures(len(L), 1)
     
-    heatmap_cum = np.zeros_like(heatmap)
-    ps = np.concatenate((np.logspace(-3,-1,3), [0.25,0.5,0.75]))
-    for p in ps:
-        levels = -np.sort(-heatmap, axis = 0)
-        a = np.argmax(np.cumsum(levels, axis = 0) >= 1-p, axis = 0)
-        cut = levels[a, np.arange(levels.shape[1])]
-        heatmap_cum[heatmap >= cut] = p
+    figure, big_axes = plt.subplots( figsize=(6, 8), nrows=len(L), ncols=1, sharey=True) 
     
-    figure = plt.figure("Eyediagram",figsize = (6,8), facecolor = 'w')
-    time = (np.arange(eye.shape[1])-eye.shape[1]//2)
-    time = time/np.max(time)*t_symb
+    for row, big_ax in enumerate(big_axes, start=0):
+        big_ax.set_title("L= "+str(2*L[row])+ " km \n")
 
-    ax1 = figure.add_subplot(len(L),2,2*num+1)
-    #plt.subplot(121)
-    ax1.plot(time, np.real(eye.T), color = 'C0', alpha = 0.4)
-    #plt.title(station)
-    ax1.set_ylabel(r'$\Re\{s(t)\}$')
-    ax1.set_xlabel('Time (s)')
-    ax1.set_xlim(min(time),max(time))
-    ax1.set_ylim(-0.2,0.2)
-    #ax1.set_ylim(-0.1,0.1)
+        # Turn off axis lines and ticks of the big subplot 
+        # obs alpha is 0 in RGBA string!
+        big_ax.tick_params(labelcolor=(1.,1.,1., 1), top='off', bottom='off', left='off', right='off')
+        # removes the white frame
+        big_ax._frameon = False
+        big_ax.set_visible = False
+        figure.set_facecolor('w')
 
-    ax1 = figure.add_subplot(len(L),2,2*num+2)
-    ax1.plot(time, np.imag(eye.T), color = 'C0', alpha = 0.4)
+    # subfigs = figure.subfigures(nrows=len(L), ncols=2)
+    # for row, subfig in enumerate(subfigs):
+    #     subfig.suptitle(f'L = '+str(2*L[row])+' km')
+    #figure.add_subplot(2*len(L),2,2*num+1)
     #plt.title(station)
-    ax1.set_ylabel(r'$\Im\{s(t)\}$')
-    ax1.set_xlabel('Time (s)')
-    ax1.set_ylim(-0.2,0.2)
-    #ax1.set_ylim(-0.1,0.1)
-    ax1.set_xlim(min(time),max(time))
+    for x in range(len(L)):
+        eyei = eye_all[x,n_up*(syms_per_filt+1):len(eye_all[x,:])-n_up*(syms_per_filt+1)]
+        eye = eyei.reshape(int(len(eyei)/(n_up*2)),int(n_up*2))
+        heatmap = np.vstack([np.histogram(eye[:,j], bins = np.linspace(-2,2,100))[0]/eye.shape[0] for j in np.arange(eye.shape[1])]).T
+    
+        heatmap_cum = np.zeros_like(heatmap)
+        ps = np.concatenate((np.logspace(-3,-1,3), [0.25,0.5,0.75]))
+        for p in ps:
+            levels = -np.sort(-heatmap, axis = 0)
+            a = np.argmax(np.cumsum(levels, axis = 0) >= 1-p, axis = 0)
+            cut = levels[a, np.arange(levels.shape[1])]
+            heatmap_cum[heatmap >= cut] = p
+
+        time = (np.arange(eye.shape[1])-eye.shape[1]//2)
+        time = time/np.max(time)*t_symb
+
+        ax1 = figure.add_subplot(len(L),2,2*x+1)
+        #plt.subplot(121)
+        ax1.plot(time, np.real(eye.T), color = 'C0', alpha = 0.4)
+        #plt.title(station)
+        ax1.set_ylabel(r'$\Re\{s(t)\}$')
+        ax1.set_xlabel('Time (s)')
+        ax1.set_xlim(min(time),max(time))
+        ax1.set_ylim(-0.2,0.2)
+        #ax1.set_ylim(-0.1,0.1)
+
+        ax2 = figure.add_subplot(len(L),2,2*x+2)
+        ax2.plot(time, np.imag(eye.T), color = 'C0', alpha = 0.4)
+        #plt.title(station)
+        ax2.set_ylabel(r'$\Im\{s(t)\}$')
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylim(-0.2,0.2)
+        #ax1.set_ylim(-0.1,0.1)
+        ax2.set_xlim(min(time),max(time))
+    plt.tight_layout()
+
+    
+
+
+    # # add subfigure per subplot
+    # gridspec = ax2.get_subplotspec().get_gridspec()
+    # subfigs = [figure.add_subfigure(gs) for gs in gridspec]
+
+    # for row, subfig in enumerate(subfigs):
+    #     subfig.suptitle(f'Subplot row title {row}')
+
+    # # create 1x3 subplots per subfig
+    # axs = subfig.subplots(nrows=1, ncols=3)
+    # for col, ax in enumerate(axs):
+    #     ax.plot()
+    #     ax.set_title(f'Plot title {col}')
     return figure
 
 
 #plot_eye(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'sinc')
 
-for l in range(len(L)):
-    eye_sig = s_sinc[l,n_up*(syms_per_filt+1):len(s_sinc[l,:])-n_up*(syms_per_filt+1)]
-    if l==0:
-        fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L)
-    else:
-        fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L,fig)
-plt.tight_layout()
-plt.savefig(f'eye_sinc.pdf')
-plt.close(fig)
+# for l in range(len(L)):
+#     eye_sig = s_sinc[l,n_up*(syms_per_filt+1):len(s_sinc[l,:])-n_up*(syms_per_filt+1)]
+#     if l==0:
+#         fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L)
+#     else:
+#         fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L,fig)
 
-for l in range(len(L)):
-    eye_sig = s_rect[l,n_up*(syms_per_filt*2):len(s_sinc[l,:])-n_up*(syms_per_filt*2)]
-    if l==0:
-        pass
-        #fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L)
-    else:
-        fig = plot_eye(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L,fig)
-plt.tight_layout()
+# # add subfigure per subplot
+# gridspec = ax1[0].get_subplotspec().get_gridspec()
+# subfigs = [fig.add_subfigure(gs) for gs in gridspec]
+
+# for row, subfig in enumerate(subfigs):
+#     subfig.suptitle(f'Subplot row title {row}')
+
+#     # create 1x3 subplots per subfig
+#     axs = subfig.subplots(nrows=1, ncols=len(L))
+#     for col, ax in enumerate(axs):
+#         ax.plot()
+#         ax.set_title(f'L = '+str(2*L[col])+' km')
+
+
+
+# plt.tight_layout()
+# plt.savefig(f'eye_sinc.pdf')
+# plt.close(fig)
+
+#for l in range(len(L)):
+eye_sig = s_rect[:,n_up*(syms_per_filt*2):len(s_sinc[0,:])-n_up*(syms_per_filt*2)]
+    
+fig = plot_eye2(eye_sig,L)
+    #else:
+    #    fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L,fig)
+#plt.tight_layout()
 plt.savefig(f'eye_rect.pdf')
 plt.close(fig)
 
-for l in range(len(L)):
+""" for l in range(len(L)):
     eye_sig = s_gauss[l,n_up*(syms_per_filt):len(s_sinc[l,:])-n_up*(syms_per_filt+2)]
     if l==0:
         fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L)
     else:
         fig = plot_eye2(np.roll(eye_sig,0).reshape(int(len(eye_sig)/(n_up*2)),int(n_up*2)),'L = '+str(2*L[l])+' km',l,L,fig)
 plt.tight_layout()
-plt.savefig(f'eye_gauss.pdf')
+plt.savefig(f'eye_gauss.pdf') """
 
 
 plt.figure("Pre compensation Frequ- domain", figsize=(6,5))
