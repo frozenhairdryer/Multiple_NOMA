@@ -3,8 +3,8 @@ from imports import *
 class Encoder(nn.Module):
     def __init__(self,M, mradius):
         super(Encoder, self).__init__()
-        self.M = torch.as_tensor(M, device='cuda')
-        self.mradius = torch.as_tensor(mradius, device='cuda')
+        self.M = torch.as_tensor(M, device=device)
+        self.mradius = torch.as_tensor(mradius, device=device)
         # Define Transmitter Layer: Linear function, M icput neurons (symbols), 2 output neurons (real and imaginary part)        
         self.fcT1 = nn.Linear(self.M,2*self.M, device=device) 
         self.fcT2 = nn.Linear(2*self.M, 2*self.M,device=device)
@@ -88,6 +88,7 @@ class Canceller(nn.Module):
         #x=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(x))+1e-9)+1j*torch.angle(torch.view_as_complex(x)))
         #decoutput=torch.view_as_real(torch.log(torch.abs(torch.view_as_complex(decoutput))+1e-9)+1j*torch.angle(torch.view_as_complex(decoutput)))
         logits = self.cancellation(x, decoutput)
+        logits = torch.view_as_real(torch.exp(torch.view_as_complex(logits)))
         #norm_factor = torch.max(torch.abs(torch.view_as_complex(logits)).flatten())
         norm_factor = torch.mean(torch.abs(torch.view_as_complex(logits)).flatten()).to(device) # normalize mean amplitude to 1
         logits = logits/norm_factor

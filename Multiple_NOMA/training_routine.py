@@ -424,8 +424,8 @@ def Multipl_NOMA(M=4,sigma_n=0.1,train_params=[50,300,0.005],canc_method='none',
     print('SNR is '+str(SNR[max_GMI])+' dB')
     #print(constellation_base)
     if plotting==True:
-        plot_training(validation_SERs.cpu().detach().numpy(), cp.asarray(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
+        plot_training(validation_SERs.cpu().detach().numpy(), np.array(validation_received),cvalid,M, constellations, gmi, decision_region_evolution, meshgrid, constellation_base,gmi_exact.detach().cpu().numpy(),gmi_est2.detach().cpu().numpy()) 
     if canc_method=='nn':
-        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asnumpy(constellations))
+        return(canc_method,enc_best,dec_best,canc_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asarray(constellations))
     else:
-        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.asnumpy(constellations))
+        return(canc_method,enc_best,dec_best, modr_eff, validation_SERs,gmi_exact, SNR, cp.array(constellations))

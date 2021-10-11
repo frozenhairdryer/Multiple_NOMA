@@ -4,12 +4,19 @@ import numpy as np
 from training_routine import *
 import pickle
 
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",
+    'font.family': 'serif',
+    'text.usetex': True,
+    'pgf.rcfonts': False,
+    'font.size' : 10,
+})
 
 ### parameters
 runs = 50
 num_epochs=60
 
-sigma_n=torch.tensor([0.09,0.09])
+sigma_n=torch.tensor([0.18,0.18])
 M=torch.tensor([4,4])
 alph=torch.tensor([1,1/3*np.sqrt(2)])
 #alph=[1,1]
@@ -33,7 +40,7 @@ for item in range(runs):
         best_achieved='nn'
 
 ## save all data if further processing is wanted
-with open('Multiple_NOMA/cancel_eval_gmiexact_NN_bw.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+with open('Multiple_NOMA/cancel_eval_gmi_NNlogexp.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
     pickle.dump([GMI_nncanc, best_impl, best_achieved, params], f)
 #print("Best implementation achieved with "+best_achieved+" cancellation.")
 
@@ -89,10 +96,10 @@ for item in range(runs):
 #         var_nncanc+=(GMI_nncanc[item]-average_nncanc)**2/runs 
 
 
-plt.figure("NN Cancellation", figsize=(3,3)) #figsize=(3.5,2)
+plt.figure("NN Cancellation", figsize=(3,2.5)) #figsize=(3.5,2)
 for item in range(runs):
-    plt.plot(GMI_nncanc[item],c=color_list[5],linewidth=1 ,alpha=0.9)
-plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")
+    plt.plot(GMI_nncanc[item],c=color_list[3],linewidth=1 ,alpha=0.9)
+plt.plot(average_nncanc, c=color_list[2],linewidth=2, label="NN log+exp cancellation")
 #plt.plot(average_nncanc1, c=color_list[10],linewidth=3, label="Enc"+str(1)+" NN cancellation")
 #plt.fill_between(np.arange(num_epochs), average_nncanc+var_nncanc,average_nncanc-var_nncanc, color=color_list[4], alpha=0.2)
 #plt.fill_between(np.arange(num_epochs), average_nncanc1+var_nncanc1,average_nncanc1-var_nncanc1, color=color_list[10], alpha=0.2)
@@ -101,10 +108,12 @@ plt.plot(average_nncanc, c=color_list[4],linewidth=2, label="NN cancellation")
 plt.legend(loc=3)
 #plt.yscale('log')
 plt.ylabel('GMI')
+plt.xlabel('epochs')
 plt.grid()
 plt.ylim(0,4)
+plt.xlim(0,num_epochs-1)
 plt.tight_layout()
-plt.savefig('Multiple_NOMA/cancell_compare_GMI_NN_bw_modradius.pgf')
+plt.savefig('Multiple_NOMA/cancell_compare_GMI_NNlogexp.pgf')
 
 plt.show()
 

@@ -310,7 +310,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     #tikzplotlib.save("figures/gmis.tex", strict=True, externalize_tables=True, override_externals=True)
 
 
-    constellations = np.array(const.get()).flatten()
+    constellations = np.array(const).flatten()
     bitmapping=[]
     torch.prod(M)
     int(torch.prod(M))
@@ -335,7 +335,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     plt.savefig("Multiple_NOMA/figures/constellation.pdf")
     #tikzplotlib.save("figures/constellation.tex", strict=True, externalize_tables=True, override_externals=True)
 
-    val_cmplx=np.array((valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]).get())
+    val_cmplx=np.asarray((valid_r[min_SER_iter][:,0]+1j*valid_r[min_SER_iter][:,1]))
 
     plt.figure("Received signal",figsize=(2.7,2.7))
     #plt.subplot(122)
@@ -358,7 +358,7 @@ def plot_training(SERs,valid_r,cvalid,M, const, GMIs_appr, decision_region_evolu
     for num in range(len(M)):
         plt.subplot(1,len(M),num+1)
         decision_scatter = np.argmax(decision_region_evolution[num], axis=1)
-        grid=meshgrid.get()
+        grid=np.asarray(meshgrid)
         if num==0:
             plt.scatter(grid[:,0], grid[:,1], c=decision_scatter,s=2,cmap=matplotlib.colors.ListedColormap(colors=new_color_list[0:int(M[num])]))
         else:

@@ -6,7 +6,7 @@ choice = 3    : theoretical multiplicative 16-QAM constellation
 choice = 4    : multiplicative NOMA including rectangular pulseshaping with the option to simulate chromatic dispersion
 """
 
-choice = 4
+choice = 2
 
 begin_time = datetime.datetime.now()
 if choice == 1:
@@ -19,7 +19,7 @@ elif choice == 2:
     M=torch.tensor([4,4], dtype=int)
     sigma_n=torch.tensor([0.18,0.18], dtype=float)
     #Multipl_NOMA(M,sigma_n,train_params=cp.array([60,600,0.003]),canc_method='nn', modradius=torch.tensor([1,1],device=device), plotting=True)
-    Multipl_NOMA(M,sigma_n,train_params=cp.array([60,600,0.005]),canc_method='div', modradius=torch.tensor([1,1],device=device), plotting=True)
+    Multipl_NOMA(M,sigma_n,train_params=cp.array([10,600,0.005]),canc_method='div', modradius=torch.tensor([1,1],device=device), plotting=True)
 elif choice == 3:
     from theoreticalMNOMA import *
     M=torch.tensor([4,4], dtype=int)
