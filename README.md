@@ -13,7 +13,6 @@ Before you start, the figure folder has to be created. Run:
 ```
 cd Multiple_NOMA/Multiple_NOMA
 mkdir figures
-
 ```
 If you are planning on running the code on cpu, run:
 ```
@@ -24,6 +23,7 @@ If you want to run on gpu, cupy is installed additionally. Run:
 ```
 pip install -r requirements_gpu.txt
 ```
+Additionally, install pytorch according to their website.
 
 ## Overview
 
