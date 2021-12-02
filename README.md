@@ -17,12 +17,12 @@ mkdir figures
 ```
 If you are planning on running the code on cpu, run:
 ```
-pip install requirements.txt
+pip install -r requirements.txt
 ```
 
 If you want to run on gpu, cupy is installed additionally. Run:
 ```
-pip install requirements_gpu.txt
+pip install -r requirements_gpu.txt
 ```
 
 ## Overview
